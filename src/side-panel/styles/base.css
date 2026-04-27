@@ -1,0 +1,285 @@
+:root {
+  color: #172033;
+  background: #f7f8fb;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 360px;
+  margin: 0;
+  background: #f7f8fb;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.app-header,
+.panel-block,
+.confirm-card {
+  border: 1px solid #dde3ee;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.app-header h1,
+.section-heading h2,
+.section-heading h3 {
+  margin: 0;
+  color: #101827;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.section-heading h2,
+.section-heading h3 {
+  font-size: 15px;
+}
+
+.panel-block {
+  padding: 14px;
+}
+
+.section-heading,
+.account-strip {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-strip strong {
+  display: block;
+  margin: 2px 0 4px;
+  font-size: 14px;
+}
+
+.account-strip span,
+.muted {
+  color: #647084;
+  font-size: 12px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #53657d;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #c5cedb;
+}
+
+.status-dot.online {
+  background: #12a150;
+}
+
+.primary-button,
+.secondary-button,
+.icon-button {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.primary-button {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.secondary-button,
+.icon-button {
+  border-color: #d4dceb;
+  background: #ffffff;
+  color: #1f2a44;
+}
+
+.single-line {
+  overflow: hidden;
+  margin: 8px 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 10px 0;
+  color: #2a3548;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.metrics,
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.metrics span {
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #48556a;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.task-composer {
+  display: grid;
+  gap: 10px;
+}
+
+.task-composer label {
+  color: #2c374b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #ccd5e4;
+  border-radius: 6px;
+  padding: 10px;
+  color: #172033;
+  line-height: 1.5;
+}
+
+textarea:focus {
+  border-color: #2563eb;
+  outline: 2px solid rgba(37, 99, 235, 0.16);
+}
+
+.run-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.plan {
+  display: grid;
+  gap: 10px;
+  color: #263247;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.plan ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.plan li span {
+  display: block;
+  font-weight: 700;
+}
+
+.plan li small {
+  display: block;
+  color: #647084;
+  font-size: 12px;
+}
+
+.confirm-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.risk {
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.risk-low {
+  background: #e8f6ee;
+  color: #087443;
+}
+
+.risk-medium {
+  background: #fff4db;
+  color: #8a5700;
+}
+
+.risk-high {
+  background: #ffe7e7;
+  color: #a32121;
+}
+
+.blocked-list,
+.results,
+.event-log {
+  border-top: 1px solid #e5eaf2;
+  padding-top: 10px;
+  font-size: 12px;
+}
+
+.blocked-list p,
+.results p,
+.event-log p {
+  margin: 6px 0 0;
+  color: #4d5a70;
+}
+
+.error-text {
+  margin: 10px 0 0;
+  color: #b42318;
+  font-size: 12px;
+}
+
+.result-succeeded {
+  color: #087443 !important;
+}
+
+.result-failed,
+.result-blocked {
+  color: #b42318 !important;
+}
