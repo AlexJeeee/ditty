@@ -4,6 +4,53 @@ const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve
 
 const createId = (prefix: string) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 
+async function* streamText(
+  runId: string,
+  text: string,
+  channel: "thinking" | "answer" = "answer",
+  messageId = createId("msg")
+): AsyncGenerator<AgentRunEvent> {
+  const chunks = text.match(/.{1,8}/gu) ?? [text];
+
+  for (const chunk of chunks) {
+    await delay(45);
+    yield {
+      type: "message_delta",
+      runId,
+      messageId,
+      text: chunk,
+      channel
+    };
+  }
+
+  yield {
+    type: "message_delta",
+    runId,
+    messageId,
+    text: "",
+    channel,
+    done: true
+  };
+}
+
+function createMockAnswer(goal: string, pageContext: PageContext) {
+  const selectedText = pageContext.selectedText.trim();
+
+  if (/翻译|translate/i.test(goal)) {
+    return selectedText
+      ? `模拟翻译结果：${selectedText}\n\n这里先保留原文语义并用中文表达。真实模型接入后会返回更自然的翻译、术语统一和上下文补全。`
+      : "当前没有检测到选中文本，我会先使用页面摘要作为翻译对象。";
+  }
+
+  if (/解释|explain/i.test(goal)) {
+    return selectedText
+      ? `模拟解释：这段文本的核心是在说明“${selectedText.slice(0, 80)}”。我会拆成背景、关键概念和可能影响三个层次来解释。真实模型接入后会给出更完整的上下文说明。`
+      : "当前没有检测到选中文本，我会基于页面可见内容做概要解释。";
+  }
+
+  return `我会基于当前页面上下文处理你的任务。已读取页面标题、可见文本、选区和可交互元素，并会把需要用户确认的页面动作留在聊天里等待你确认。`;
+}
+
 export async function createAgentRun(goal: string, pageContext: PageContext): Promise<AgentRun> {
   await delay(250);
 
@@ -22,12 +69,7 @@ export async function createAgentRun(goal: string, pageContext: PageContext): Pr
 
 export async function* streamAgentRun(run: AgentRun, pageContext: PageContext): AsyncGenerator<AgentRunEvent> {
   yield { type: "status", runId: run.id, status: "planning" };
-  await delay(500);
-  yield {
-    type: "message",
-    runId: run.id,
-    text: `已读取当前页面：${pageContext.title || pageContext.origin}`
-  };
+  yield* streamText(run.id, `已读取当前页面：${pageContext.title || pageContext.origin}。我正在理解你的目标并生成可确认的执行计划。`, "thinking");
 
   await delay(600);
 
@@ -92,9 +134,11 @@ export async function* streamAgentRun(run: AgentRun, pageContext: PageContext): 
 
   yield { type: "plan", runId: run.id, plan };
   await delay(300);
+  yield* streamText(run.id, createMockAnswer(run.goal, pageContext), "answer");
 
   const confirmable = steps.find((step) => step.requiresConfirmation);
   if (confirmable) {
+    await delay(200);
     yield { type: "status", runId: run.id, status: "requires_confirmation" };
     yield { type: "action_request", runId: run.id, action: confirmable };
     return;

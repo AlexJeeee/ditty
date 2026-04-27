@@ -118,6 +118,7 @@ export interface AgentActionResult {
 export type AgentRunEvent =
   | { type: "status"; runId: string; status: AgentRunStatus }
   | { type: "message"; runId: string; text: string }
+  | { type: "message_delta"; runId: string; messageId: string; text: string; done?: boolean; channel?: "thinking" | "answer" }
   | { type: "plan"; runId: string; plan: AgentPlan }
   | { type: "action_request"; runId: string; action: AgentAction }
   | { type: "action_result"; runId: string; result: AgentActionResult }

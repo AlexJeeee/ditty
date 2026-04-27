@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-import AgentRunPanel from "./components/AgentRunPanel.vue";
+import ChatPanel from "./components/ChatPanel.vue";
 import LoginPanel from "./components/LoginPanel.vue";
 import PageContextBar from "./components/PageContextBar.vue";
-import TaskComposer from "./components/TaskComposer.vue";
 import { useAgentRunStore } from "./stores/agent-run";
 import { useAuthStore } from "./stores/auth";
 import { usePageContextStore } from "./stores/page-context";
@@ -105,7 +104,6 @@ function handleStorageChange(changes: Record<string, chrome.storage.StorageChang
 
     <LoginPanel />
     <PageContextBar />
-    <TaskComposer v-if="auth.authenticated" v-model="composerGoal" @submit="start" />
-    <AgentRunPanel />
+    <ChatPanel v-if="auth.authenticated" v-model="composerGoal" @submit="start" />
   </main>
 </template>
