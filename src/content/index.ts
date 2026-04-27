@@ -1,6 +1,9 @@
 import { collectPageContext } from "./collect-page-context";
 import { executeAction, highlightElement } from "./execute-action";
+import { setupSelectionMenu } from "./selection-menu";
 import type { ExtensionMessage } from "@/shared/extension-messages";
+
+setupSelectionMenu();
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
   if (message.type === "page_context:get") {

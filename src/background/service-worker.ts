@@ -3,8 +3,12 @@ import type {
   ExecuteActionMessage,
   ExtensionResponse,
   GetPageContextMessage,
+  SelectionActionResponse,
+  SelectionActionInvokeMessage,
+  SelectionActionPayload,
   PageContextResponse
 } from "@/shared/extension-messages";
+import { PENDING_SELECTION_ACTION_STORAGE_KEY } from "@/shared/extension-messages";
 import type { AgentActionResult, ExtensionError, PageContext } from "@/shared/types";
 
 async function getActiveTab() {
@@ -49,6 +53,27 @@ async function sendToActiveTab<T>(message: GetPageContextMessage | ExecuteAction
   }
 }
 
+async function handleSelectionAction(
+  message: SelectionActionInvokeMessage,
+  sender: chrome.runtime.MessageSender
+): Promise<ExtensionResponse<SelectionActionPayload>> {
+  await chrome.storage.local.set({
+    [PENDING_SELECTION_ACTION_STORAGE_KEY]: message.payload
+  });
+
+  if (sender.tab?.windowId) {
+    await chrome.sidePanel.open({ windowId: sender.tab.windowId }).catch(() => {
+      // Chrome may reject sidePanel.open if the user gesture is not preserved through the content-script message.
+      // The pending action is already stored, so it will be picked up the next time the panel opens.
+    });
+  }
+
+  return {
+    ok: true,
+    data: message.payload
+  };
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {
     // Older Chrome versions may not support this helper. action.onClicked below is the fallback.
@@ -75,6 +100,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendToActiveTab<AgentActionResult>(message)
       .then((response: ActionExecutionResponse) => sendResponse(response))
       .catch((error) => sendResponse({ ok: false, error: toExtensionError(error, "动作执行失败。") }));
+    return true;
+  }
+
+  if (message.type === "selection_action:invoke") {
+    handleSelectionAction(message, _sender)
+      .then((response: SelectionActionResponse) => sendResponse(response))
+      .catch((error) => sendResponse({ ok: false, error: toExtensionError(error, "选中文本操作失败。") }));
     return true;
   }
 

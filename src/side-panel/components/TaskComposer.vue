@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed } from "vue";
 
 const emit = defineEmits<{
+  "update:modelValue": [goal: string];
   submit: [goal: string];
 }>();
 
-const goal = ref("总结当前页面，并指出可以安全执行的下一步");
+const props = defineProps<{
+  modelValue: string;
+}>();
+
+const goal = computed({
+  get: () => props.modelValue,
+  set: (value: string) => emit("update:modelValue", value)
+});
 
 function submit() {
   const value = goal.value.trim();
