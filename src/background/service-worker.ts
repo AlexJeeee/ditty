@@ -57,21 +57,36 @@ async function handleSelectionAction(
   message: SelectionActionInvokeMessage,
   sender: chrome.runtime.MessageSender
 ): Promise<ExtensionResponse<SelectionActionPayload>> {
-  await chrome.storage.local.set({
+  const openSidePanelPromise = openAgentSidePanel(sender);
+  const storeSelectionPromise = chrome.storage.local.set({
     [PENDING_SELECTION_ACTION_STORAGE_KEY]: message.payload
   });
 
-  if (sender.tab?.windowId) {
-    await chrome.sidePanel.open({ windowId: sender.tab.windowId }).catch(() => {
-      // Chrome may reject sidePanel.open if the user gesture is not preserved through the content-script message.
-      // The pending action is already stored, so it will be picked up the next time the panel opens.
-    });
+  const [openResult] = await Promise.allSettled([openSidePanelPromise, storeSelectionPromise]);
+
+  if (openResult.status === "rejected") {
+    console.warn("Unable to open side panel from selection action.", openResult.reason);
   }
 
   return {
     ok: true,
     data: message.payload
   };
+}
+
+function openAgentSidePanel(sender: chrome.runtime.MessageSender) {
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
+
+  if (typeof tabId === "number") {
+    return chrome.sidePanel.open({ tabId });
+  }
+
+  if (typeof windowId === "number") {
+    return chrome.sidePanel.open({ windowId });
+  }
+
+  return Promise.resolve();
 }
 
 chrome.runtime.onInstalled.addListener(() => {

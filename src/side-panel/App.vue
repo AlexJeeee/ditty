@@ -28,9 +28,11 @@ onBeforeUnmount(() => {
   chrome.storage.onChanged.removeListener(handleStorageChange);
 });
 
-async function start(goal: string) {
-  if (!pageContext.context) {
-    await pageContext.refresh();
+async function start(goal: string, selectionPayload?: SelectionActionPayload) {
+  await pageContext.refresh();
+
+  if (selectionPayload) {
+    pageContext.applySelectionAction(selectionPayload);
   }
 
   if (pageContext.context) {
@@ -61,12 +63,15 @@ async function handleSelectionAction(payload: SelectionActionPayload) {
 
   await chrome.storage.local.remove(PENDING_SELECTION_ACTION_STORAGE_KEY);
 
+  await pageContext.refresh();
+  pageContext.applySelectionAction(payload);
+
   if (payload.action === "add_to_chat") {
     return;
   }
 
   await nextTick();
-  await start(goal);
+  await start(goal, payload);
 }
 
 async function consumePendingSelectionAction() {
