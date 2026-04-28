@@ -2,18 +2,19 @@
 
 一个基于 Chrome Manifest V3 的网页 AI Agent 插件。插件通过 Side Panel 读取当前网页上下文，支持聊天式任务输入、选中文本快捷菜单、Agent 计划展示、动作确认和受控页面操作。
 
-当前 AI 能力为本地 mock，已预留流式事件、计划协议和动作执行协议，后续可以替换为真实后端 Agent 或模型网关。
+当前 AI 聊天能力通过本地 Node 代理接入 OpenAI Responses API。OpenAI Key 只放在本地 `.env` 中，Chrome 扩展只调用本地代理服务。
 
 ## 功能概览
 
 - 聊天式侧边栏：用户输入任务后，Agent 在聊天流中返回思考、计划、回答和执行结果。
-- 流式输出：mock Agent 使用增量事件模拟模型流式回复。
+- 流式输出：本地代理把 OpenAI 流式响应转换为插件现有的增量事件。
 - 可折叠思考与计划：Agent 思考和执行计划默认以折叠块展示，减少聊天区占用。
 - 选中文本快捷菜单：网页中选中文本后，旁边弹出 `翻译`、`解释`、`添加到对话`。
 - 自动打开侧边栏：点击选中文本菜单后自动打开 Agent Side Panel，并同步本次选区。
 - 页面上下文采集：读取当前页面标题、URL、选中文本、可见文本摘要、标题、表格和可交互元素。
 - 受控动作执行：页面动作必须映射到白名单工具协议，高风险动作默认阻断。
 - 动作确认：需要用户确认的动作直接在聊天框内展示 `执行` / `跳过`。
+- 打开新网页：Agent 可通过 `open_url` 工具请求打开指定 http/https 网址，确认后由 Background 在新标签页执行。
 
 ## 技术栈
 
@@ -21,6 +22,8 @@
 - Vue 3
 - TypeScript
 - Vite
+- Fastify
+- OpenAI Responses API
 - `@crxjs/vite-plugin`
 - Pinia
 - pnpm
@@ -36,8 +39,9 @@
 ├── src/
 │   ├── background/             # Service Worker，负责插件生命周期与消息转发
 │   ├── content/                # Content Script，负责页面采集、选区菜单和动作执行
-│   ├── shared/                 # 共享类型、消息协议和 mock API
+│   ├── shared/                 # 共享类型、消息协议和 API client
 │   └── side-panel/             # Vue Side Panel UI
+├── server/                     # 本地 OpenAI 代理服务
 ├── manifest.config.ts          # MV3 manifest 配置
 ├── vite.config.ts              # Vite + CRXJS 配置
 └── package.json
@@ -53,11 +57,36 @@ pnpm install
 
 ### 2. 启动开发模式
 
+复制环境变量示例并填入真实 OpenAI Key：
+
 ```bash
-pnpm dev
+cp .env.example .env
 ```
 
-开发服务器固定使用 `localhost:5173`。保持该命令运行，CRXJS 会维护开发态 `dist` 产物并提供 HMR / reload 能力。
+`.env` 至少需要：
+
+```text
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-5.2
+OPENAI_TIMEOUT_MS=120000
+AI_AGENT_PORT=8787
+VITE_AGENT_API_BASE_URL=http://127.0.0.1:8787
+```
+
+同时启动扩展开发服务器和本地 AI 代理：
+
+```bash
+pnpm dev:all
+```
+
+也可以分别启动：
+
+```bash
+pnpm dev
+pnpm server:dev
+```
+
+扩展开发服务器固定使用 `localhost:5173`，本地 AI 代理默认使用 `http://127.0.0.1:8787`。保持命令运行，CRXJS 会维护开发态 `dist` 产物并提供 HMR / reload 能力。
 
 ### 3. 加载 Chrome 插件
 
@@ -72,8 +101,11 @@ pnpm dev
 
 ```bash
 pnpm dev        # 启动 CRXJS/Vite 开发模式
+pnpm server:dev # 启动本地 OpenAI 代理
+pnpm dev:all    # 同时启动扩展和本地代理
 pnpm build      # 类型检查并构建生产产物
 pnpm typecheck  # 仅运行 TypeScript / Vue 类型检查
+pnpm server:typecheck # 仅运行本地代理类型检查
 pnpm test       # 运行测试
 ```
 
@@ -88,11 +120,12 @@ pnpm test       # 运行测试
 
 ## 当前实现边界
 
-- AI 模型能力暂时由 `src/shared/api-client.ts` mock。
+- AI 聊天能力已通过本地代理接入 OpenAI；未启动代理或未配置 `OPENAI_API_KEY` 时，聊天区会显示可读错误。
 - 登录为本地演示态，尚未接入真实认证服务。
-- 当前不会保存或调用第三方模型 API Key。
+- Chrome 扩展不会保存或调用第三方模型 API Key，Key 只存在本地 Node 代理进程中。
 - 高风险页面动作会被本地策略阻断。
-- 后续真实后端可沿用现有 `AgentRunEvent`、`AgentPlan`、`AgentAction` 和扩展消息协议。
+- 浏览器级导航只支持 `http` / `https` 网址，不会打开 `chrome://`、`file://`、`javascript:` 等特殊地址。
+- 首版真实模型链路只做聊天和页面理解，不由模型直接触发网页动作。
 
 ## 相关文档
 

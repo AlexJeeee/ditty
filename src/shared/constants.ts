@@ -10,6 +10,7 @@ export const SAFE_TOOLS: AgentToolName[] = [
   "click_element",
   "fill_input",
   "scroll_page",
+  "open_url",
   "copy_result"
 ];
 

@@ -6,14 +6,21 @@
   "packageManager": "pnpm@9.14.2",
   "scripts": {
     "dev": "vite --host localhost --mode development",
+    "server:dev": "tsx watch server/index.ts",
+    "dev:all": "concurrently -n extension,server -c blue,green \"pnpm dev\" \"pnpm server:dev\"",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
+    "server:typecheck": "tsc --noEmit -p server/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.32",
+    "@fastify/cors": "^11.2.0",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.8.5",
+    "openai": "^6.34.0",
     "pinia": "^2.3.1",
     "vue": "^3.5.13"
   },
@@ -21,6 +28,8 @@
     "@types/chrome": "^0.0.287",
     "@types/node": "^22.10.2",
     "@vitejs/plugin-vue": "^5.2.1",
+    "concurrently": "^9.2.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.2",
     "vite": "^5.4.11",
     "vitest": "^2.1.8",

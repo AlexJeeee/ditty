@@ -309,6 +309,7 @@ export type AgentToolName =
   | "click_element"
   | "fill_input"
   | "scroll_page"
+  | "open_url"
   | "copy_result";
 
 export type ActionRiskLevel = "low" | "medium" | "high";
@@ -325,6 +326,7 @@ export interface AgentAction {
   input?: {
     text?: string;
     value?: string;
+    url?: string;
   };
   reason: string;
 }
@@ -362,6 +364,7 @@ export interface AgentActionResult {
 5. 目标元素必须存在、可见、未禁用。
 6. 目标元素不得是密码、验证码、支付、删除、提交等敏感控件。
 7. 页面 URL 与动作计划生成时的 URL 必须一致，或要求用户重新确认。
+8. `open_url` 属于浏览器级工具，由 Background 执行，只允许 `http` / `https`，并且需要用户确认。
 
 ## 7. 后端技术设计
 
@@ -677,23 +680,26 @@ audit_logs
 ### 12.2 本地开发
 
 1. `pnpm install`
-2. `pnpm dev`
-3. 打开 `chrome://extensions`
-4. 启用开发者模式
-5. 加载 `dist` 或开发插件输出目录
-6. 打开普通网页并测试 Side Panel
+2. 复制 `.env.example` 为 `.env`，并设置 `OPENAI_API_KEY`
+3. `pnpm dev:all`
+4. 打开 `chrome://extensions`
+5. 启用开发者模式
+6. 加载 `dist` 或开发插件输出目录
+7. 打开普通网页并测试 Side Panel
 
 ### 12.3 环境变量
 
 前端只允许保存后端地址等非敏感配置：
 
 ```text
-VITE_API_BASE_URL=https://api.example.com
+VITE_AGENT_API_BASE_URL=http://127.0.0.1:8787
 ```
 
 模型供应商 Key 只存在后端：
 
 ```text
+AI_AGENT_PORT=8787
+OPENAI_MODEL=gpt-5.2
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 GEMINI_API_KEY=

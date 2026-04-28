@@ -15,7 +15,7 @@ const summary = computed(() => pageContext.context?.visibleTextSummary || "点�
         <p class="eyebrow">当前页面</p>
         <h2>{{ pageContext.pageTitle }}</h2>
       </div>
-      <button class="icon-button" type="button" title="刷新页面上下文" :disabled="pageContext.loading" @click="pageContext.refresh">
+      <button class="icon-button" type="button" title="刷新页面上下文" :disabled="pageContext.loading" @click="() => pageContext.refresh()">
         {{ pageContext.loading ? "读取中" : "刷新" }}
       </button>
     </div>

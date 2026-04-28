@@ -18,6 +18,7 @@ export interface GetPageContextMessage {
   payload: {
     includeSelection: boolean;
     includeInteractiveElements: boolean;
+    tabId?: number;
   };
 }
 
@@ -54,13 +55,25 @@ export interface SelectionActionInvokeMessage {
   payload: SelectionActionPayload;
 }
 
+export interface ActiveTabChangedMessage {
+  type: "active_tab:changed";
+  payload: {
+    tabId: number;
+    windowId: number;
+    url?: string;
+    title?: string;
+    status?: "loading" | "complete" | "unloaded";
+  };
+}
+
 export type ExtensionMessage =
   | GetPageContextMessage
   | ExecuteActionMessage
   | HighlightElementMessage
   | AgentRunUpdateMessage
   | AuthStateChangedMessage
-  | SelectionActionInvokeMessage;
+  | SelectionActionInvokeMessage
+  | ActiveTabChangedMessage;
 
 export type ExtensionResponse<T> =
   | {

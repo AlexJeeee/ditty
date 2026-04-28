@@ -8,6 +8,7 @@ import { useAuthStore } from "./stores/auth";
 import { usePageContextStore } from "./stores/page-context";
 import {
   PENDING_SELECTION_ACTION_STORAGE_KEY,
+  type ExtensionMessage,
   type SelectionActionPayload,
   type SelectionMenuAction
 } from "@/shared/extension-messages";
@@ -21,10 +22,12 @@ const handledSelectionActionId = ref("");
 onMounted(() => {
   pageContext.refresh();
   consumePendingSelectionAction();
+  chrome.runtime.onMessage.addListener(handleRuntimeMessage);
   chrome.storage.onChanged.addListener(handleStorageChange);
 });
 
 onBeforeUnmount(() => {
+  chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
   chrome.storage.onChanged.removeListener(handleStorageChange);
 });
 
@@ -94,6 +97,15 @@ function handleStorageChange(changes: Record<string, chrome.storage.StorageChang
   if (payload) {
     void handleSelectionAction(payload);
   }
+}
+
+function handleRuntimeMessage(message: ExtensionMessage) {
+  if (message.type !== "active_tab:changed") {
+    return false;
+  }
+
+  void pageContext.refresh({ tabId: message.payload.tabId });
+  return false;
 }
 </script>
 

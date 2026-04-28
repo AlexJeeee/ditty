@@ -152,6 +152,7 @@ MVP 支持的工具：
 | `click_element` | 点击普通按钮、链接或选项 | 中 |
 | `fill_input` | 填写普通输入框 | 中 |
 | `scroll_page` | 页面滚动或跳转到元素位置 | 低 |
+| `open_url` | 打开新的浏览器标签页并访问指定 http/https 网址 | 中 |
 | `copy_result` | 将 Agent 结果复制到剪贴板 | 低 |
 
 MVP 禁止或默认拦截的动作：

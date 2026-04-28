@@ -5,10 +5,22 @@ export default defineManifest({
   name: "Chrome AI Agent",
   description: "A controllable AI agent side panel for understanding and acting on webpages.",
   version: "0.1.0",
-  permissions: ["activeTab", "storage", "scripting", "sidePanel","tabs"],
-  host_permissions: [],
+  permissions: ["activeTab", "storage", "scripting", "sidePanel", "tabs"],
+  host_permissions: ["http://localhost:8787/*", "http://127.0.0.1:8787/*"],
+  icons: {
+    16: "icons/icon-16.png",
+    32: "icons/icon-32.png",
+    48: "icons/icon-48.png",
+    128: "icons/icon-128.png"
+  },
   action: {
-    default_title: "Chrome AI Agent"
+    default_title: "Chrome AI Agent",
+    default_icon: {
+      16: "icons/icon-16.png",
+      32: "icons/icon-32.png",
+      48: "icons/icon-48.png",
+      128: "icons/icon-128.png"
+    }
   },
   background: {
     service_worker: "src/background/service-worker.ts",

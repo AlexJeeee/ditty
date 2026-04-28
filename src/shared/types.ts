@@ -27,6 +27,7 @@ export type AgentToolName =
   | "click_element"
   | "fill_input"
   | "scroll_page"
+  | "open_url"
   | "copy_result";
 
 export interface PageHeading {
@@ -86,6 +87,7 @@ export interface AgentAction {
   input?: {
     text?: string;
     value?: string;
+    url?: string;
   };
   reason: string;
 }

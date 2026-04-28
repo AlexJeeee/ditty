@@ -5,6 +5,8 @@ import type { ExtensionError, PageContext } from "@/shared/types";
 
 export const usePageContextStore = defineStore("page-context", () => {
   const context = ref<PageContext | null>(null);
+  const activeTabId = ref<number | null>(null);
+  let refreshRequestId = 0;
   const loading = ref(false);
   const error = ref<ExtensionError | null>(null);
 
@@ -19,7 +21,9 @@ export const usePageContextStore = defineStore("page-context", () => {
     }
   }
 
-  async function refresh() {
+  async function refresh(options: { tabId?: number } = {}) {
+    const requestId = ++refreshRequestId;
+
     loading.value = true;
     error.value = null;
 
@@ -28,9 +32,15 @@ export const usePageContextStore = defineStore("page-context", () => {
         type: "page_context:get",
         payload: {
           includeSelection: true,
-          includeInteractiveElements: true
+          includeInteractiveElements: true,
+          tabId: options.tabId
         }
       })) as PageContextResponse;
+
+      if (requestId !== refreshRequestId) {
+        return context.value;
+      }
+
       if (!response?.ok) {
         error.value = response?.error ?? {
           code: "UNKNOWN_ERROR",
@@ -40,9 +50,14 @@ export const usePageContextStore = defineStore("page-context", () => {
         return null;
       }
 
+      activeTabId.value = options.tabId ?? activeTabId.value;
       context.value = response.data;
       return context.value;
     } catch (caught) {
+      if (requestId !== refreshRequestId) {
+        return context.value;
+      }
+
       error.value = {
         code: "UNKNOWN_ERROR",
         message: caught instanceof Error ? caught.message : "页面上下文读取失败。",
@@ -50,7 +65,9 @@ export const usePageContextStore = defineStore("page-context", () => {
       };
       return null;
     } finally {
-      loading.value = false;
+      if (requestId === refreshRequestId) {
+        loading.value = false;
+      }
     }
   }
 
@@ -75,6 +92,7 @@ export const usePageContextStore = defineStore("page-context", () => {
 
   return {
     context,
+    activeTabId,
     loading,
     error,
     pageTitle,

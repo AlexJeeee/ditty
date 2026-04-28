@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Chrome AI Agent icon">
+  <defs>
+    <linearGradient id="bg" x1="18" y1="14" x2="110" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="0.52" stop-color="#0f9f8f"/>
+      <stop offset="1" stop-color="#14b86d"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="34" y1="24" x2="92" y2="106" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="30" fill="url(#bg)"/>
+  <path d="M30 88c-7.5-8.1-11.5-17.4-11.5-28.1C18.5 34.6 39 16 64 16s45.5 18.6 45.5 43.9S89 104 64 104c-7.5 0-14.5-1.7-20.6-4.8L28 106.8l3.7-18.1Z" fill="#fff" opacity="0.94"/>
+  <path d="M30 88c-7.5-8.1-11.5-17.4-11.5-28.1C18.5 34.6 39 16 64 16s45.5 18.6 45.5 43.9S89 104 64 104c-7.5 0-14.5-1.7-20.6-4.8L28 106.8l3.7-18.1Z" fill="url(#shine)"/>
+  <path d="M70 31 75.2 50.8 95 56l-19.8 5.2L70 81 64.8 61.2 45 56l19.8-5.2L70 31Z" fill="#172033"/>
+  <path d="M48 64c5.6 7.3 10.9 11 16 11 5.2 0 10.6-3.7 16-11" fill="none" stroke="#172033" stroke-width="8" stroke-linecap="round"/>
+</svg>
