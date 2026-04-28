@@ -43,7 +43,7 @@ function messageLabel(message: ChatMessage) {
   }
 
   if (message.kind === "action_confirmation") {
-    return "动作确认";
+    return message.action?.requiresConfirmation ? "动作确认" : "工具动作";
   }
 
   if (message.kind === "result") {
@@ -163,7 +163,7 @@ onMounted(scrollToBottom);
               <span class="risk" :class="`risk-${message.action.riskLevel}`">{{ message.action.riskLevel }}</span>
             </div>
             <p v-if="message.action.target" class="muted">目标：{{ message.action.target.description }}</p>
-            <div class="button-row">
+            <div v-if="message.action.requiresConfirmation" class="button-row">
               <button
                 class="primary-button"
                 type="button"
@@ -182,6 +182,7 @@ onMounted(scrollToBottom);
               </button>
               <span class="action-status">{{ actionStatusText(message) }}</span>
             </div>
+            <p v-else class="action-status">{{ actionStatusText(message) }}</p>
           </div>
         </template>
 

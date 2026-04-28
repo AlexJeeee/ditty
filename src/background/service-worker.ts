@@ -10,8 +10,8 @@ import type {
   PageContextResponse
 } from "@/shared/extension-messages";
 import { PENDING_SELECTION_ACTION_STORAGE_KEY } from "@/shared/extension-messages";
-import { normalizeHttpUrl } from "@/shared/url-action";
-import type { AgentAction, AgentActionResult, ExtensionError, PageContext } from "@/shared/types";
+import { executeAgentAction } from "./action-executors";
+import type { AgentActionResult, ExtensionError, PageContext } from "@/shared/types";
 
 async function getActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -120,74 +120,6 @@ async function getPageContext(message: GetPageContextMessage): Promise<PageConte
   return sendToTab<PageContext>(message, tab.id);
 }
 
-function createActionResult(
-  action: AgentAction,
-  status: AgentActionResult["status"],
-  message: string,
-  output?: unknown
-): AgentActionResult {
-  return {
-    actionId: action.id,
-    status,
-    message,
-    output
-  };
-}
-
-async function executeBrowserAction(action: AgentAction): Promise<ActionExecutionResponse> {
-  if (action.riskLevel === "high") {
-    return {
-      ok: true,
-      data: createActionResult(action, "blocked", "高风险浏览器动作已被本地策略阻断。")
-    };
-  }
-
-  if (action.toolName !== "open_url") {
-    return {
-      ok: false,
-      error: {
-        code: "ACTION_REJECTED",
-        message: "未知或未启用的浏览器级工具动作。",
-        retryable: false
-      }
-    };
-  }
-
-  const rawUrl = action.input?.url ?? action.input?.value ?? action.input?.text ?? action.target?.description ?? "";
-  const normalized = normalizeHttpUrl(rawUrl);
-
-  if (!normalized.ok) {
-    return {
-      ok: true,
-      data: createActionResult(action, "blocked", normalized.message)
-    };
-  }
-
-  const activeTab = await getActiveTab();
-  const createProperties: chrome.tabs.CreateProperties = {
-    active: true,
-    url: normalized.url
-  };
-
-  if (typeof activeTab?.windowId === "number") {
-    createProperties.windowId = activeTab.windowId;
-  }
-
-  if (typeof activeTab?.id === "number") {
-    createProperties.openerTabId = activeTab.id;
-  }
-
-  const createdTab = await chrome.tabs.create(createProperties);
-
-  return {
-    ok: true,
-    data: createActionResult(action, "succeeded", `已打开新标签页：${normalized.url}`, {
-      tabId: createdTab.id,
-      url: normalized.url
-    })
-  };
-}
-
 async function handleSelectionAction(
   message: SelectionActionInvokeMessage,
   sender: chrome.runtime.MessageSender
@@ -283,11 +215,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === "agent_action:execute") {
-    const action = message.payload.action;
-    const actionPromise =
-      action.toolName === "open_url" ? executeBrowserAction(action) : sendToTab<AgentActionResult>(message);
-
-    actionPromise
+    executeAgentAction(message, (actionMessage) => sendToTab<AgentActionResult>(actionMessage))
       .then((response: ActionExecutionResponse) => sendResponse(response))
       .catch((error) => sendResponse({ ok: false, error: toExtensionError(error, "动作执行失败。") }));
     return true;

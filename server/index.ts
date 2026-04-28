@@ -2,7 +2,15 @@ import cors from "@fastify/cors";
 import "dotenv/config";
 import Fastify from "fastify";
 import OpenAI from "openai";
-import type { AgentPlan, AgentRun, AgentRunEvent, PageContext } from "../src/shared/types";
+import {
+  accumulateToolCalls,
+  createActionFromToolCall,
+  hasModelToolDefinition,
+  MODEL_CHAT_TOOLS,
+  MODEL_TOOL_PLAN_STEPS,
+  type ToolCallAccumulator
+} from "./model-tools";
+import type { AgentAction, AgentPlan, AgentRun, AgentRunEvent, PageContext } from "../src/shared/types";
 
 interface CreateAgentRunBody {
   goal?: string;
@@ -100,27 +108,33 @@ function validatePageContext(value: unknown): PageContext {
 }
 
 function createPlan(pageContext: PageContext): AgentPlan {
-  return {
-    summary: "已接入 OpenAI 真实模型。本次首版只生成聊天回答和页面理解，不由模型直接触发浏览器动作。",
-    steps: [
-      {
-        id: createId("action"),
-        toolName: "read_page",
-        riskLevel: "low",
-        requiresConfirmation: false,
-        reason: `读取当前页面标题、URL、选区和可见文本摘要：${pageContext.title || pageContext.origin || "当前页面"}。`
+  const steps: AgentAction[] = [
+    {
+      id: createId("action"),
+      toolName: "read_page",
+      riskLevel: "low",
+      requiresConfirmation: false,
+      reason: `读取当前页面标题、URL、选区和可见文本摘要：${pageContext.title || pageContext.origin || "当前页面"}。`
+    },
+    {
+      id: createId("action"),
+      toolName: "summarize_selection",
+      riskLevel: "low",
+      requiresConfirmation: false,
+      input: {
+        text: pageContext.selectedText || pageContext.visibleTextSummary.slice(0, 240)
       },
-      {
-        id: createId("action"),
-        toolName: "summarize_selection",
-        riskLevel: "low",
-        requiresConfirmation: false,
-        input: {
-          text: pageContext.selectedText || pageContext.visibleTextSummary.slice(0, 240)
-        },
-        reason: pageContext.selectedText ? "优先结合用户选中的网页文本回答。" : "未检测到选区，结合页面可见内容摘要回答。"
-      }
-    ],
+      reason: pageContext.selectedText ? "优先结合用户选中的网页文本回答。" : "未检测到选区，结合页面可见内容摘要回答。"
+    },
+    ...MODEL_TOOL_PLAN_STEPS.map((step) => ({
+      ...step,
+      id: createId("action")
+    }))
+  ];
+
+  return {
+    summary: "已接入 OpenAI 真实模型。模型可以请求打开网页，但必须先生成白名单工具动作并等待你确认。",
+    steps,
     blockedActions: []
   };
 }
@@ -154,6 +168,17 @@ function buildPrompt(goal: string, pageContext: PageContext) {
     "可交互元素摘要：",
     elements || "(无)"
   ].join("\n");
+}
+
+function writeAssistantDone(raw: NodeJS.WritableStream, runId: string, messageId: string) {
+  writeSseEvent(raw, {
+    type: "message_delta",
+    runId,
+    messageId,
+    text: "",
+    channel: "answer",
+    done: true
+  });
 }
 
 function writeSseEvent(raw: NodeJS.WritableStream, event: AgentRunEvent) {
@@ -302,26 +327,33 @@ fastify.post<{ Params: { runId: string }; Body: StreamAgentRunBody }>("/api/agen
   
   try {
     const openai = requireOpenAIClient();
+    const toolCalls: ToolCallAccumulator[] = [];
+    let hasAnswerText = false;
     const stream = await openai.chat.completions.create({
       model,
       messages: [
         {
           role: "system",
           content:
-            "你是一个运行在 Chrome 侧边栏里的网页 AI 助手。请用中文回答，优先结合用户任务和网页上下文。不要声称你已经点击、填写或修改了网页；首版只能聊天和理解页面。如果页面信息不足，请明确说明缺口并给出可执行建议。"
+            "你是一个运行在 Chrome 侧边栏里的网页 AI 助手。请用中文回答，优先结合用户任务和网页上下文。你可以在用户明确要求或任务确实需要时调用可用工具。工具调用只会生成待确认动作，不会立即执行；不要声称你已经打开、点击、填写或修改了网页。如果工具参数不确定，请不要猜测，改为向用户说明缺口。"
         },
         {
           role: "user",
           content: buildPrompt(goal, pageContext)
         }
       ],
+      tools: MODEL_CHAT_TOOLS,
+      tool_choice: "auto",
+      parallel_tool_calls: false,
       stream: true
     });
 
     for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content;
+      const choiceDelta = chunk.choices[0]?.delta;
+      const delta = choiceDelta?.content;
 
       if (typeof delta === "string" && delta.length > 0) {
+        hasAnswerText = true;
         writeSseEvent(reply.raw, {
           type: "message_delta",
           runId: run.id,
@@ -330,19 +362,67 @@ fastify.post<{ Params: { runId: string }; Body: StreamAgentRunBody }>("/api/agen
           channel: "answer"
         });
       }
+
+      if (choiceDelta?.tool_calls?.length) {
+        accumulateToolCalls(toolCalls, choiceDelta.tool_calls);
+      }
     }
 
-    writeSseEvent(reply.raw, {
-      type: "message_delta",
-      runId: run.id,
-      messageId,
-      text: "",
-      channel: "answer",
-      done: true
-    });
-    writeSseEvent(reply.raw, { type: "status", runId: run.id, status: "completed" });
+    if (hasAnswerText) {
+      writeAssistantDone(reply.raw, run.id, messageId);
+    }
+
+    const requestedToolCall =
+      toolCalls.find((toolCall) => hasModelToolDefinition(toolCall.name)) ?? toolCalls[0];
+
+    if (requestedToolCall) {
+      const { action, blockedReason } = createActionFromToolCall(requestedToolCall, createId("action"));
+
+      if (action) {
+        if (!hasAnswerText) {
+          writeSseEvent(reply.raw, {
+            type: "message_delta",
+            runId: run.id,
+            messageId,
+            text: action.requiresConfirmation
+              ? "我已准备好一个需要确认的动作，请确认后我再执行。"
+              : "我已准备好一个安全动作，会直接执行并返回结果。",
+            channel: "answer"
+          });
+          writeAssistantDone(reply.raw, run.id, messageId);
+        }
+
+        writeSseEvent(reply.raw, { type: "action_request", runId: run.id, action });
+        if (action.requiresConfirmation) {
+          writeSseEvent(reply.raw, { type: "status", runId: run.id, status: "requires_confirmation" });
+        }
+      } else {
+        writeSseEvent(reply.raw, {
+          type: "message_delta",
+          runId: run.id,
+          messageId,
+          text: blockedReason || "模型请求的工具动作未通过本地校验。",
+          channel: "answer"
+        });
+        writeAssistantDone(reply.raw, run.id, messageId);
+        writeSseEvent(reply.raw, { type: "status", runId: run.id, status: "blocked" });
+      }
+    } else {
+      if (!hasAnswerText) {
+        writeSseEvent(reply.raw, {
+          type: "message_delta",
+          runId: run.id,
+          messageId,
+          text: "我没有找到需要执行的新动作，会继续停留在当前页面对话。",
+          channel: "answer"
+        });
+        writeAssistantDone(reply.raw, run.id, messageId);
+      }
+
+      writeSseEvent(reply.raw, { type: "status", runId: run.id, status: "completed" });
+    }
   } catch (error) {
-    console.log(error, 'error')
+    fastify.log.error(error);
     writeSseEvent(reply.raw, toErrorEvent(run.id, error));
     writeSseEvent(reply.raw, { type: "status", runId: run.id, status: "failed" });
   } finally {

@@ -2,7 +2,7 @@
 
 一个基于 Chrome Manifest V3 的网页 AI Agent 插件。插件通过 Side Panel 读取当前网页上下文，支持聊天式任务输入、选中文本快捷菜单、Agent 计划展示、动作确认和受控页面操作。
 
-当前 AI 聊天能力通过本地 Node 代理接入 OpenAI Responses API。OpenAI Key 只放在本地 `.env` 中，Chrome 扩展只调用本地代理服务。
+当前 AI 聊天能力通过本地 Node 代理接入 OpenAI Chat Completions API。OpenAI Key 只放在本地 `.env` 中，Chrome 扩展只调用本地代理服务。
 
 ## 功能概览
 
@@ -23,7 +23,7 @@
 - TypeScript
 - Vite
 - Fastify
-- OpenAI Responses API
+- OpenAI Chat Completions API
 - `@crxjs/vite-plugin`
 - Pinia
 - pnpm
@@ -125,7 +125,7 @@ pnpm test       # 运行测试
 - Chrome 扩展不会保存或调用第三方模型 API Key，Key 只存在本地 Node 代理进程中。
 - 高风险页面动作会被本地策略阻断。
 - 浏览器级导航只支持 `http` / `https` 网址，不会打开 `chrome://`、`file://`、`javascript:` 等特殊地址。
-- 首版真实模型链路只做聊天和页面理解，不由模型直接触发网页动作。
+- AI 可以通过 `open_url` 工具请求打开网页，但只会生成待确认动作，真正打开标签页前仍需用户点击确认。
 
 ## 相关文档
 

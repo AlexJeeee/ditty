@@ -121,7 +121,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     }
   }
 
-  function applyEvent(event: AgentRunEvent) {
+  async function applyEvent(event: AgentRunEvent) {
     events.value.push(event);
 
     if (event.type === "status" && run.value) {
@@ -155,15 +155,22 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     }
 
     if (event.type === "action_request") {
-      pendingAction.value = event.action;
       pushMessage({
         id: `action_${event.action.id}`,
         role: "assistant",
         kind: "action_confirmation",
         content: event.action.reason,
         action: event.action,
-        actionStatus: "pending"
+        actionStatus: event.action.requiresConfirmation ? "pending" : "executing"
       });
+
+      if (event.action.requiresConfirmation) {
+        pendingAction.value = event.action;
+      } else {
+        await executeAction(event.action, {
+          completionText: "动作已自动完成。我会继续把执行结果保留在当前对话里。"
+        });
+      }
     }
 
     if (event.type === "action_result") {
@@ -207,7 +214,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
       run.value = await createAgentRun(goal, pageContext);
 
       for await (const event of streamAgentRun(run.value, pageContext)) {
-        applyEvent(event);
+        await applyEvent(event);
       }
     } catch (caught) {
       error.value = {
@@ -225,12 +232,11 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     }
   }
 
-  async function executePendingAction() {
-    if (!run.value || !pendingAction.value) {
+  async function executeAction(action: AgentAction, options?: { completionText?: string }) {
+    if (!run.value) {
       return;
     }
 
-    const action = pendingAction.value;
     loading.value = true;
     updateActionMessage(action.id, "executing");
     applyEvent({ type: "status", runId: run.value.id, status: "running" });
@@ -253,7 +259,9 @@ export const useAgentRunStore = defineStore("agent-run", () => {
             error: response.error
           };
 
-      pendingAction.value = null;
+      if (pendingAction.value?.id === action.id) {
+        pendingAction.value = null;
+      }
       updateActionMessage(action.id, result.status === "succeeded" ? "confirmed" : "rejected");
       applyEvent({ type: "action_result", runId: run.value.id, result });
       applyEvent({
@@ -261,10 +269,22 @@ export const useAgentRunStore = defineStore("agent-run", () => {
         runId: run.value.id,
         status: result.status === "succeeded" ? "completed" : "failed"
       });
-      await streamLocalAssistantText(result.status === "succeeded" ? "动作已完成。我会继续把执行结果保留在当前对话里。" : "动作没有成功执行，原因已经显示在上方。");
+      await streamLocalAssistantText(
+        result.status === "succeeded"
+          ? options?.completionText ?? "动作已完成。我会继续把执行结果保留在当前对话里。"
+          : "动作没有成功执行，原因已经显示在上方。"
+      );
     } finally {
       loading.value = false;
     }
+  }
+
+  async function executePendingAction() {
+    if (!pendingAction.value) {
+      return;
+    }
+
+    await executeAction(pendingAction.value);
   }
 
   function rejectPendingAction() {
