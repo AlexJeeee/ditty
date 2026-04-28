@@ -78,6 +78,23 @@ MVP 阶段不包含以下能力：
 
 ## 3. MVP 功能需求
 
+### 3.0 当前实现状态
+
+当前仓库已经落地一个本地演示版 MVP：Side Panel 使用聊天流承载任务输入、计划、思考、回答、动作确认和执行结果；本地 Node 代理通过 OpenAI 兼容 Chat Completions 接口生成回答和工具动作；登录、任务历史、审计、额度和多模型路由仍是后续产品化范围。
+
+当前已实现能力：
+
+- 页面上下文采集、选中文本快捷菜单和活动标签页刷新。
+- 聊天式任务输入、流式回答、计划展示、思考块折叠。
+- `open_url` 浏览器级工具确认执行，以及 Content Script 白名单动作执行框架。
+- 本地代理 `/api/agent/runs`、`/api/agent/runs/:runId/stream`、`/api/agent/runs/:runId/stop`。
+
+当前未实现或仅为占位：
+
+- 真实登录、用户额度、任务历史和审计日志。
+- 多供应商模型路由、降级和数据库持久化。
+- 企业租户、管理后台和商业化计费。
+
 ### 3.1 插件入口与主界面
 
 插件首版采用 Chrome Side Panel 作为主要交互入口，提供以下区域：
@@ -242,6 +259,22 @@ MVP 禁止或默认拦截的动作：
 
 ## 5. 接口草案
 
+本节包含两类接口：当前本地演示版已实现的 Agent run 接口，以及后续产品化需要补齐的认证、模型列表、动作确认和历史接口。
+
+### 5.0 当前本地接口
+
+当前仓库已实现：
+
+```http
+GET /health
+GET /health/openai
+POST /api/agent/runs
+POST /api/agent/runs/:runId/stream
+POST /api/agent/runs/:runId/stop
+```
+
+动作确认当前发生在插件内：Side Panel 在聊天消息中展示 `执行` / `跳过`，确认后通过 Service Worker 转发给 Content Script 或 Background 执行。
+
 ### 5.1 登录
 
 ```http
@@ -329,16 +362,20 @@ POST /api/agent/runs
 
 ```json
 {
-  "runId": "run_123",
-  "status": "draft",
-  "streamUrl": "/api/agent/runs/run_123/stream"
+  "id": "run_123",
+  "status": "created",
+  "goal": "帮我总结当前页面，并找出可执行的下一步",
+  "pageUrl": "https://example.com/article",
+  "pageTitle": "Example Article",
+  "createdAt": "2026-04-28T00:00:00.000Z",
+  "updatedAt": "2026-04-28T00:00:00.000Z"
 }
 ```
 
 ### 5.4 订阅任务流
 
 ```http
-GET /api/agent/runs/:id/stream
+POST /api/agent/runs/:runId/stream
 ```
 
 SSE 事件类型：

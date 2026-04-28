@@ -2,12 +2,12 @@
 
 一个基于 Chrome Manifest V3 的网页 AI Agent 插件。插件通过 Side Panel 读取当前网页上下文，支持聊天式任务输入、选中文本快捷菜单、Agent 计划展示、动作确认和受控页面操作。
 
-当前 AI 聊天能力通过本地 Node 代理接入 OpenAI Chat Completions API。OpenAI Key 只放在本地 `.env` 中，Chrome 扩展只调用本地代理服务。
+当前 AI 聊天能力通过本地 Node 代理接入 OpenAI 兼容的 Chat Completions API。模型 Key 只放在本地 `.env` 中，Chrome 扩展只调用本地代理服务。
 
 ## 功能概览
 
 - 聊天式侧边栏：用户输入任务后，Agent 在聊天流中返回思考、计划、回答和执行结果。
-- 流式输出：本地代理把 OpenAI 流式响应转换为插件现有的增量事件。
+- 流式输出：本地代理把模型流式响应转换为插件现有的增量事件。
 - 可折叠思考与计划：Agent 思考和执行计划默认以折叠块展示，减少聊天区占用。
 - 选中文本快捷菜单：网页中选中文本后，旁边弹出 `翻译`、`解释`、`添加到对话`。
 - 自动打开侧边栏：点击选中文本菜单后自动打开 Agent Side Panel，并同步本次选区。
@@ -23,7 +23,7 @@
 - TypeScript
 - Vite
 - Fastify
-- OpenAI Chat Completions API
+- OpenAI 兼容 Chat Completions API
 - `@crxjs/vite-plugin`
 - Pinia
 - pnpm
@@ -39,9 +39,9 @@
 ├── src/
 │   ├── background/             # Service Worker，负责插件生命周期与消息转发
 │   ├── content/                # Content Script，负责页面采集、选区菜单和动作执行
-│   ├── shared/                 # 共享类型、消息协议和 API client
-│   └── side-panel/             # Vue Side Panel UI
-├── server/                     # 本地 OpenAI 代理服务
+│   ├── shared/                 # 共享类型、消息协议、ID 工具和 API client
+│   └── side-panel/             # Vue Side Panel UI、组件和 Pinia stores
+├── server/                     # 本地模型代理、Agent 路由、SSE 和上下文裁剪
 ├── manifest.config.ts          # MV3 manifest 配置
 ├── vite.config.ts              # Vite + CRXJS 配置
 └── package.json
@@ -57,7 +57,7 @@ pnpm install
 
 ### 2. 启动开发模式
 
-复制环境变量示例并填入真实 OpenAI Key：
+复制环境变量示例并填入真实模型 Key：
 
 ```bash
 cp .env.example .env
@@ -67,11 +67,15 @@ cp .env.example .env
 
 ```text
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-5.2
+OPENAI_MODEL=MiniMax-M2.7
 OPENAI_TIMEOUT_MS=120000
+OPENAI_MAX_RETRIES=1
+OPENAI_BASE_URL=https://api.minimaxi.com/v1
 AI_AGENT_PORT=8787
 VITE_AGENT_API_BASE_URL=http://127.0.0.1:8787
 ```
+
+`OPENAI_BASE_URL` 可以指向 OpenAI 官方或其他 OpenAI 兼容供应商；`OPENAI_MODEL` 需要与该供应商实际可用模型一致。
 
 同时启动扩展开发服务器和本地 AI 代理：
 
@@ -109,6 +113,25 @@ pnpm server:typecheck # 仅运行本地代理类型检查
 pnpm test       # 运行测试
 ```
 
+重构或清理代码后建议额外运行：
+
+```bash
+pnpm exec vue-tsc --noEmit --noUnusedLocals --noUnusedParameters
+pnpm exec tsc --noEmit -p server/tsconfig.json --noUnusedLocals --noUnusedParameters
+git diff --check
+```
+
+## 代码结构说明
+
+- `src/side-panel/components/ChatPanel.vue` 只负责聊天区外壳和自动滚动。
+- `src/side-panel/components/ChatComposer.vue` 负责输入框自适应、发送和停止。
+- `src/side-panel/components/ChatMessageItem.vue` 负责单条消息、计划、思考块和动作确认渲染。
+- `src/side-panel/stores/agent-run.ts` 负责 Agent run 编排、API 调用、停止和动作执行。
+- `src/side-panel/stores/agent-run-messages.ts` 保存聊天消息类型、消息生成和事件应用等纯逻辑。
+- `server/index.ts` 只负责 Fastify 初始化、CORS 和启动监听。
+- `server/agent-routes.ts` 注册 `/health`、`/health/openai`、`/api/agent/runs`、`/api/agent/runs/:runId/stream` 和 `/api/agent/runs/:runId/stop`。
+- `server/config.ts`、`server/run-store.ts`、`server/agent-prompt.ts`、`server/sse.ts` 分别负责环境配置、run 状态、prompt/plan 和 SSE 写入。
+
 ## 开发说明
 
 - Side Panel 的 Vue 改动通常会通过 Vite HMR 即时生效。
@@ -120,7 +143,7 @@ pnpm test       # 运行测试
 
 ## 当前实现边界
 
-- AI 聊天能力已通过本地代理接入 OpenAI；未启动代理或未配置 `OPENAI_API_KEY` 时，聊天区会显示可读错误。
+- AI 聊天能力已通过本地代理接入 OpenAI 兼容接口；未启动代理或未配置 `OPENAI_API_KEY` 时，聊天区会显示可读错误。
 - 登录为本地演示态，尚未接入真实认证服务。
 - Chrome 扩展不会保存或调用第三方模型 API Key，Key 只存在本地 Node 代理进程中。
 - 高风险页面动作会被本地策略阻断。
