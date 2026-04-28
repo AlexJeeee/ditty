@@ -6,6 +6,7 @@ export type AgentRunStatus =
   | "planning"
   | "requires_confirmation"
   | "running"
+  | "stopped"
   | "completed"
   | "blocked"
   | "failed";

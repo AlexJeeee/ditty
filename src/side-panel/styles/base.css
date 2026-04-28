@@ -546,16 +546,145 @@ textarea:focus {
 }
 
 .chat-composer {
-  align-items: stretch;
   border-top: 1px solid #e5eaf2;
   background: #ffffff;
   padding-top: 12px;
 }
 
+.composer-surface {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #ccd5e4;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(16, 24, 39, 0.06);
+  padding: 10px 10px 8px;
+}
+
+.composer-surface:focus-within {
+  border-color: #aab7ca;
+  box-shadow:
+    0 4px 12px rgba(16, 24, 39, 0.09),
+    0 0 0 2px rgba(37, 99, 235, 0.08);
+}
+
 .chat-composer textarea {
-  min-height: 72px;
+  min-height: 32px;
+  max-height: 112px;
+  resize: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 13px;
+  overflow-y: hidden;
+}
+
+.chat-composer textarea:focus {
+  border-color: transparent;
+  outline: 0;
+}
+
+.chat-composer textarea:disabled {
+  background: transparent;
+  color: #53657d;
 }
 
 .chat-composer .primary-button {
   min-width: 70px;
+}
+
+.composer-toolbar,
+.composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.composer-actions {
+  justify-content: flex-end;
+}
+
+.composer-tool-button {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #111827;
+  padding: 0;
+}
+
+.composer-plus-button {
+  font-size: 22px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.composer-action-button {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: #101827;
+  color: #ffffff;
+  padding: 0;
+}
+
+.composer-action-stop {
+  border-color: #cbd5e1;
+  background: #101827;
+}
+
+.send-arrow {
+  width: 9px;
+  height: 9px;
+  border-top: 3px solid currentColor;
+  border-left: 3px solid currentColor;
+  transform: translateY(2px) rotate(45deg);
+}
+
+.stop-square {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.mic-icon {
+  position: relative;
+  width: 10px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+}
+
+.mic-icon::before {
+  position: absolute;
+  right: -4px;
+  bottom: -5px;
+  left: -4px;
+  height: 6px;
+  border: 2px solid currentColor;
+  border-top: 0;
+  border-radius: 0 0 999px 999px;
+  content: "";
+}
+
+.mic-icon::after {
+  position: absolute;
+  bottom: -9px;
+  left: 50%;
+  width: 2px;
+  height: 4px;
+  background: currentColor;
+  content: "";
+  transform: translateX(-50%);
 }

@@ -82,7 +82,16 @@ async function* readSseEvents(response: Response): AsyncGenerator<AgentRunEvent>
   }
 }
 
-export async function createAgentRun(goal: string, pageContext: PageContext): Promise<AgentRun> {
+interface AgentRequestOptions {
+  signal?: AbortSignal;
+}
+
+interface StopAgentRunResponse {
+  ok: boolean;
+  status: AgentRun["status"];
+}
+
+export async function createAgentRun(goal: string, pageContext: PageContext, options?: AgentRequestOptions): Promise<AgentRun> {
   try {
     const response = await fetch(`${getApiBaseUrl()}/api/agent/runs`, {
       method: "POST",
@@ -92,7 +101,8 @@ export async function createAgentRun(goal: string, pageContext: PageContext): Pr
       body: JSON.stringify({
         goal,
         pageContext
-      })
+      }),
+      signal: options?.signal
     });
 
     return parseJsonResponse<AgentRun>(response, "Agent Run 创建失败。");
@@ -101,7 +111,7 @@ export async function createAgentRun(goal: string, pageContext: PageContext): Pr
   }
 }
 
-export async function* streamAgentRun(run: AgentRun, pageContext: PageContext): AsyncGenerator<AgentRunEvent> {
+export async function* streamAgentRun(run: AgentRun, pageContext: PageContext, options?: AgentRequestOptions): AsyncGenerator<AgentRunEvent> {
   let response: Response;
 
   try {
@@ -113,11 +123,20 @@ export async function* streamAgentRun(run: AgentRun, pageContext: PageContext): 
       },
       body: JSON.stringify({
         pageContext
-      })
+      }),
+      signal: options?.signal
     });
   } catch (error) {
     throw new Error(error instanceof Error ? error.message : "Agent 流式连接失败，请确认本地代理服务已启动。");
   }
 
   yield* readSseEvents(response);
+}
+
+export async function stopAgentRun(runId: string): Promise<StopAgentRunResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/api/agent/runs/${runId}/stop`, {
+    method: "POST"
+  });
+
+  return parseJsonResponse<StopAgentRunResponse>(response, "Agent Run 停止失败。");
 }

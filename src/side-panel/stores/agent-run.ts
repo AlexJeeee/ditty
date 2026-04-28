@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import { createAgentRun, streamAgentRun } from "@/shared/api-client";
+import { createAgentRun, stopAgentRun, streamAgentRun } from "@/shared/api-client";
 import type { ActionExecutionResponse } from "@/shared/extension-messages";
 import type { AgentAction, AgentActionResult, AgentPlan, AgentRun, AgentRunEvent, ExtensionError, PageContext } from "@/shared/types";
 
@@ -40,10 +40,15 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     }
   ]);
   const loading = ref(false);
+  const stopping = ref(false);
+  const stopRequested = ref(false);
+  const silentStopRequested = ref(false);
+  const activeAbortController = ref<AbortController | null>(null);
   const error = ref<ExtensionError | null>(null);
 
   const hasRun = computed(() => Boolean(run.value));
   const canSend = computed(() => !loading.value && !pendingAction.value);
+  const canStop = computed(() => Boolean(activeAbortController.value) && loading.value);
   const statusLabel = computed(() => run.value?.status ?? "idle");
 
   function reset() {
@@ -54,6 +59,11 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     results.value = [];
     messages.value = [];
     error.value = null;
+    stopping.value = false;
+    stopRequested.value = false;
+    silentStopRequested.value = true;
+    activeAbortController.value?.abort();
+    activeAbortController.value = null;
     loading.value = false;
   }
 
@@ -95,6 +105,27 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     }
 
     appendTextDelta(messageId, "", true, "text");
+  }
+
+  function isAbortError(caught: unknown) {
+    return caught instanceof Error && (caught.name === "AbortError" || /aborted|abort/i.test(caught.message));
+  }
+
+  function finishStreamingMessages() {
+    for (const message of messages.value) {
+      if (message.streaming) {
+        message.streaming = false;
+      }
+    }
+  }
+
+  function markStopped() {
+    finishStreamingMessages();
+    if (run.value) {
+      run.value.status = "stopped";
+      run.value.updatedAt = new Date().toISOString();
+      events.value.push({ type: "status", runId: run.value.id, status: "stopped" });
+    }
   }
 
   function formatPlan(planValue: AgentPlan) {
@@ -198,7 +229,12 @@ export const useAgentRunStore = defineStore("agent-run", () => {
       return;
     }
 
+    const abortController = new AbortController();
     loading.value = true;
+    stopping.value = false;
+    stopRequested.value = false;
+    silentStopRequested.value = false;
+    activeAbortController.value = abortController;
     error.value = null;
     plan.value = null;
     pendingAction.value = null;
@@ -211,12 +247,28 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     });
 
     try {
-      run.value = await createAgentRun(goal, pageContext);
+      run.value = await createAgentRun(goal, pageContext, {
+        signal: abortController.signal
+      });
 
-      for await (const event of streamAgentRun(run.value, pageContext)) {
+      for await (const event of streamAgentRun(run.value, pageContext, {
+        signal: abortController.signal
+      })) {
         await applyEvent(event);
       }
     } catch (caught) {
+      if (stopRequested.value || isAbortError(caught)) {
+        if (!silentStopRequested.value) {
+          markStopped();
+          pushMessage({
+            role: "assistant",
+            kind: "text",
+            content: "已终止当前回答。"
+          });
+        }
+        return;
+      }
+
       error.value = {
         code: "UNKNOWN_ERROR",
         message: caught instanceof Error ? caught.message : "Agent 运行失败。",
@@ -228,7 +280,34 @@ export const useAgentRunStore = defineStore("agent-run", () => {
         content: error.value.message
       });
     } finally {
+      if (activeAbortController.value === abortController) {
+        activeAbortController.value = null;
+      }
+      stopping.value = false;
+      silentStopRequested.value = false;
       loading.value = false;
+    }
+  }
+
+  async function stop() {
+    if (!canStop.value) {
+      return;
+    }
+
+    stopRequested.value = true;
+    stopping.value = true;
+    const runId = run.value?.id;
+    activeAbortController.value?.abort();
+
+    if (!runId) {
+      markStopped();
+      return;
+    }
+
+    try {
+      await stopAgentRun(runId);
+    } catch {
+      // The local abort above already stops the visible stream; the backend may have closed first.
     }
   }
 
@@ -314,11 +393,14 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     results,
     messages,
     loading,
+    stopping,
     error,
     hasRun,
     canSend,
+    canStop,
     statusLabel,
     start,
+    stop,
     executePendingAction,
     rejectPendingAction,
     reset

@@ -27,6 +27,10 @@ interface StoredRun {
   pageContext: PageContext;
 }
 
+interface ActiveStream {
+  abortController: AbortController;
+}
+
 const DEFAULT_MODEL = "gpt-5.2";
 const DEFAULT_PORT = 8787;
 const DEFAULT_OPENAI_TIMEOUT_MS = 120_000;
@@ -35,6 +39,7 @@ const MAX_VISIBLE_TEXT_LENGTH = 6000;
 const MAX_SELECTED_TEXT_LENGTH = 4000;
 const MAX_ELEMENT_COUNT = 20;
 const runs = new Map<string, StoredRun>();
+const activeStreams = new Map<string, ActiveStream>();
 
 const fastify = Fastify({
   logger: true
@@ -211,6 +216,11 @@ function toErrorEvent(runId: string, error: unknown): AgentRunEvent {
   };
 }
 
+function setRunStatus(stored: StoredRun, status: AgentRun["status"]) {
+  stored.run.status = status;
+  stored.run.updatedAt = new Date().toISOString();
+}
+
 fastify.get("/health", async () => ({
   ok: true,
   model: getModel(),
@@ -295,8 +305,19 @@ fastify.post<{ Params: { runId: string }; Body: StreamAgentRunBody }>("/api/agen
   const { run, goal } = stored;
   const messageId = createId("openai");
   const model = getModel();
+  const abortController = new AbortController();
+  let clientClosed = false;
+
+  activeStreams.get(run.id)?.abortController.abort();
+  activeStreams.set(run.id, { abortController });
 
   reply.hijack();
+  reply.raw.on("close", () => {
+    if (!reply.raw.writableEnded) {
+      clientClosed = true;
+      abortController.abort();
+    }
+  });
   reply.raw.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
@@ -305,6 +326,7 @@ fastify.post<{ Params: { runId: string }; Body: StreamAgentRunBody }>("/api/agen
   });
   reply.raw.flushHeaders?.();
 
+  setRunStatus(stored, "planning");
   writeSseEvent(reply.raw, { type: "status", runId: run.id, status: "planning" });
   const thinkingMessageId = createId("thinking");
   writeSseEvent(reply.raw, {
@@ -323,6 +345,7 @@ fastify.post<{ Params: { runId: string }; Body: StreamAgentRunBody }>("/api/agen
     done: true
   });
   writeSseEvent(reply.raw, { type: "plan", runId: run.id, plan: createPlan(pageContext) });
+  setRunStatus(stored, "running");
   writeSseEvent(reply.raw, { type: "status", runId: run.id, status: "running" });
   
   try {
@@ -346,6 +369,8 @@ fastify.post<{ Params: { runId: string }; Body: StreamAgentRunBody }>("/api/agen
       tool_choice: "auto",
       parallel_tool_calls: false,
       stream: true
+    }, {
+      signal: abortController.signal
     });
 
     for await (const chunk of stream) {
@@ -394,6 +419,7 @@ fastify.post<{ Params: { runId: string }; Body: StreamAgentRunBody }>("/api/agen
 
         writeSseEvent(reply.raw, { type: "action_request", runId: run.id, action });
         if (action.requiresConfirmation) {
+          setRunStatus(stored, "requires_confirmation");
           writeSseEvent(reply.raw, { type: "status", runId: run.id, status: "requires_confirmation" });
         }
       } else {
@@ -405,6 +431,7 @@ fastify.post<{ Params: { runId: string }; Body: StreamAgentRunBody }>("/api/agen
           channel: "answer"
         });
         writeAssistantDone(reply.raw, run.id, messageId);
+        setRunStatus(stored, "blocked");
         writeSseEvent(reply.raw, { type: "status", runId: run.id, status: "blocked" });
       }
     } else {
@@ -419,16 +446,52 @@ fastify.post<{ Params: { runId: string }; Body: StreamAgentRunBody }>("/api/agen
         writeAssistantDone(reply.raw, run.id, messageId);
       }
 
+      setRunStatus(stored, "completed");
       writeSseEvent(reply.raw, { type: "status", runId: run.id, status: "completed" });
     }
   } catch (error) {
+    if (abortController.signal.aborted) {
+      setRunStatus(stored, "stopped");
+      if (!clientClosed && !reply.raw.destroyed) {
+        writeAssistantDone(reply.raw, run.id, messageId);
+        writeSseEvent(reply.raw, { type: "status", runId: run.id, status: "stopped" });
+      }
+      return;
+    }
+
     fastify.log.error(error);
     writeSseEvent(reply.raw, toErrorEvent(run.id, error));
+    setRunStatus(stored, "failed");
     writeSseEvent(reply.raw, { type: "status", runId: run.id, status: "failed" });
   } finally {
-    writeSseDone(reply.raw);
-    reply.raw.end();
+    if (activeStreams.get(run.id)?.abortController === abortController) {
+      activeStreams.delete(run.id);
+    }
+    if (!clientClosed && !reply.raw.destroyed) {
+      writeSseDone(reply.raw);
+      reply.raw.end();
+    }
   }
+});
+
+fastify.post<{ Params: { runId: string } }>("/api/agent/runs/:runId/stop", async (request, reply) => {
+  const stored = runs.get(request.params.runId);
+
+  if (!stored) {
+    return reply.code(404).send({
+      error: {
+        message: "Agent Run 不存在或服务已重启，请重新发起任务。"
+      }
+    });
+  }
+
+  activeStreams.get(request.params.runId)?.abortController.abort();
+  setRunStatus(stored, "stopped");
+
+  return {
+    ok: true,
+    status: stored.run.status
+  };
 });
 
 const port = getPort();

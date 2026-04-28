@@ -111,14 +111,6 @@ function handleRuntimeMessage(message: ExtensionMessage) {
 
 <template>
   <main class="app-shell">
-    <header class="app-header">
-      <div>
-        <p class="eyebrow">Chrome AI Agent</p>
-        <h1>网页执行工作台</h1>
-      </div>
-      <span class="status-dot" :class="{ online: auth.authenticated }" title="登录状态" />
-    </header>
-
     <LoginPanel />
     <PageContextBar />
     <ChatPanel v-if="auth.authenticated" v-model="composerGoal" @submit="start" />

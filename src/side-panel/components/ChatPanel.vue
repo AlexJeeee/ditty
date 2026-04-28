@@ -14,9 +14,28 @@ const emit = defineEmits<{
 
 const agentRun = useAgentRunStore();
 const logRef = ref<HTMLElement | null>(null);
+const composerTextareaRef = ref<HTMLTextAreaElement | null>(null);
 
 function updateDraft(value: string) {
   emit("update:modelValue", value);
+}
+
+function resizeComposerTextarea(textarea = composerTextareaRef.value) {
+  if (!textarea) {
+    return;
+  }
+
+  textarea.style.height = "auto";
+  const maxHeight = Number.parseFloat(window.getComputedStyle(textarea).maxHeight);
+  const nextHeight = Number.isFinite(maxHeight) ? Math.min(textarea.scrollHeight, maxHeight) : textarea.scrollHeight;
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = textarea.scrollHeight > nextHeight ? "auto" : "hidden";
+}
+
+function handleInput(event: Event) {
+  const textarea = event.target as HTMLTextAreaElement;
+  updateDraft(textarea.value);
+  resizeComposerTextarea(textarea);
 }
 
 function submit() {
@@ -94,7 +113,12 @@ watch(
   { flush: "post" }
 );
 
-onMounted(scrollToBottom);
+watch(() => props.modelValue, () => nextTick(() => resizeComposerTextarea()), { flush: "post" });
+
+onMounted(() => {
+  scrollToBottom();
+  resizeComposerTextarea();
+});
 </script>
 
 <template>
@@ -202,17 +226,39 @@ onMounted(scrollToBottom);
     </div>
 
     <form class="chat-composer" @submit.prevent="submit">
-      <textarea
-        :value="modelValue"
-        rows="3"
-        placeholder="输入你想让 Agent 处理的任务"
-        :disabled="agentRun.loading"
-        @input="updateDraft(($event.target as HTMLTextAreaElement).value)"
-        @keydown.enter.exact.prevent="submit"
-      />
-      <button class="primary-button" type="submit" :disabled="!modelValue.trim() || !agentRun.canSend">
-        {{ agentRun.loading ? "生成中" : "发送" }}
-      </button>
+      <div class="composer-surface">
+        <textarea
+          ref="composerTextareaRef"
+          :value="modelValue"
+          rows="2"
+          placeholder="输入你想让 Agent 处理的任务"
+          :disabled="agentRun.loading"
+          @input="handleInput"
+          @keydown.enter.exact.prevent="submit"
+        />
+        <div class="composer-toolbar">
+          <button class="composer-tool-button composer-plus-button" type="button" title="添加内容" aria-label="添加内容">
+            <span aria-hidden="true">+</span>
+          </button>
+          <div class="composer-actions">
+            <button class="composer-tool-button" type="button" title="语音输入" aria-label="语音输入">
+              <span class="mic-icon" aria-hidden="true" />
+            </button>
+            <button
+              class="composer-action-button"
+              :class="{ 'composer-action-stop': agentRun.loading }"
+              :type="agentRun.loading ? 'button' : 'submit'"
+              :title="agentRun.loading ? '终止当前回答' : '发送'"
+              :aria-label="agentRun.loading ? '终止当前回答' : '发送'"
+              :disabled="agentRun.loading ? !agentRun.canStop : !modelValue.trim() || !agentRun.canSend"
+              @click="agentRun.loading ? agentRun.stop() : undefined"
+            >
+              <span v-if="agentRun.loading" class="stop-square" aria-hidden="true" />
+              <span v-else class="send-arrow" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      </div>
     </form>
   </section>
 </template>
