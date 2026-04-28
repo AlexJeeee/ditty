@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from "vue";
+import { renderMarkdown, splitThinkSections } from "@/shared/markdown";
 import { useAgentRunStore, type ChatMessage } from "../stores/agent-run";
 
 const props = defineProps<{
@@ -61,6 +62,14 @@ function actionStatusText(message: ChatMessage) {
   };
 
   return message.actionStatus ? statusMap[message.actionStatus] : "等待确认";
+}
+
+function messageSections(message: ChatMessage) {
+  return splitThinkSections(message.content).map((section, index) => ({
+    ...section,
+    id: `${message.id}_${index}`,
+    html: renderMarkdown(section.content)
+  }));
 }
 
 function scrollToBottom() {
@@ -140,7 +149,7 @@ onMounted(scrollToBottom);
               <span>{{ message.streaming ? "正在思考" : "查看思考过程" }}</span>
               <small>{{ message.content.length }} 字</small>
             </summary>
-            <p class="message-text">{{ message.content }}</p>
+            <div class="markdown-body" v-html="renderMarkdown(message.content)" />
           </details>
         </template>
 
@@ -176,7 +185,18 @@ onMounted(scrollToBottom);
           </div>
         </template>
 
-        <p v-else class="message-text">{{ message.content }}</p>
+        <template v-else>
+          <template v-for="section in messageSections(message)" :key="section.id">
+            <details v-if="section.type === 'think'" class="collapsible-message think-section" :open="message.streaming">
+              <summary>
+                <span>{{ message.streaming ? "正在思考" : "查看思考过程" }}</span>
+                <small>{{ section.content.length }} 字</small>
+              </summary>
+              <div class="markdown-body" v-html="section.html" />
+            </details>
+            <div v-else class="markdown-body" v-html="section.html" />
+          </template>
+        </template>
       </article>
     </div>
 
