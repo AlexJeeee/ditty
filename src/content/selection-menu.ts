@@ -1,4 +1,5 @@
 import type { SelectionMenuAction } from "@/shared/extension-messages";
+import { createScopedId } from "@/shared/id";
 
 const MENU_ID = "chrome-ai-agent-selection-menu";
 const MAX_SELECTION_LENGTH = 5000;
@@ -185,7 +186,7 @@ async function invokeSelectionAction(action: SelectionMenuAction) {
   await chrome.runtime.sendMessage({
     type: "selection_action:invoke",
     payload: {
-      id: `selection_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: createScopedId("selection", 6),
       action,
       selectedText: text,
       pageTitle: document.title,

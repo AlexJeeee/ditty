@@ -1,4 +1,4 @@
-import type { AgentAction, AgentActionResult, AgentRunEvent, ExtensionError, PageContext } from "./types";
+import type { AgentAction, AgentActionResult, ExtensionError, PageContext } from "./types";
 
 export const PENDING_SELECTION_ACTION_STORAGE_KEY = "pendingSelectionAction";
 
@@ -30,26 +30,6 @@ export interface ExecuteActionMessage {
   };
 }
 
-export interface HighlightElementMessage {
-  type: "element:highlight";
-  payload: {
-    elementId: string;
-    durationMs: number;
-  };
-}
-
-export interface AgentRunUpdateMessage {
-  type: "agent_run:update";
-  payload: AgentRunEvent;
-}
-
-export interface AuthStateChangedMessage {
-  type: "auth:state_changed";
-  payload: {
-    authenticated: boolean;
-  };
-}
-
 export interface SelectionActionInvokeMessage {
   type: "selection_action:invoke";
   payload: SelectionActionPayload;
@@ -69,9 +49,6 @@ export interface ActiveTabChangedMessage {
 export type ExtensionMessage =
   | GetPageContextMessage
   | ExecuteActionMessage
-  | HighlightElementMessage
-  | AgentRunUpdateMessage
-  | AuthStateChangedMessage
   | SelectionActionInvokeMessage
   | ActiveTabChangedMessage;
 

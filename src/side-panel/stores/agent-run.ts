@@ -3,26 +3,18 @@ import { computed, ref } from "vue";
 import { createAgentRun, stopAgentRun, streamAgentRun } from "@/shared/api-client";
 import type { ActionExecutionResponse } from "@/shared/extension-messages";
 import type { AgentAction, AgentActionResult, AgentPlan, AgentRun, AgentRunEvent, ExtensionError, PageContext } from "@/shared/types";
-
-type ChatRole = "user" | "assistant" | "system";
-type ChatMessageKind = "text" | "thinking" | "plan" | "action_confirmation" | "result" | "error";
-type ActionMessageStatus = "pending" | "executing" | "confirmed" | "rejected";
-
-export interface ChatMessage {
-  id: string;
-  role: ChatRole;
-  kind: ChatMessageKind;
-  content: string;
-  createdAt: string;
-  streaming?: boolean;
-  plan?: AgentPlan;
-  action?: AgentAction;
-  actionStatus?: ActionMessageStatus;
-  result?: AgentActionResult;
-}
+import {
+  appendTextDelta,
+  applyAgentRunEvent,
+  createMessageId,
+  createWelcomeMessage,
+  finishStreamingMessages,
+  pushMessage,
+  updateActionMessage,
+  type AgentRunMessageState
+} from "./agent-run-messages";
 
 const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
-const createMessageId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 export const useAgentRunStore = defineStore("agent-run", () => {
   const run = ref<AgentRun | null>(null);
@@ -30,15 +22,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
   const events = ref<AgentRunEvent[]>([]);
   const pendingAction = ref<AgentAction | null>(null);
   const results = ref<AgentActionResult[]>([]);
-  const messages = ref<ChatMessage[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      kind: "text",
-      content: "你好，我可以读取当前网页、解释选中文本，并在需要操作页面时先把动作发到这里让你确认。",
-      createdAt: new Date().toISOString()
-    }
-  ]);
+  const messages = ref([createWelcomeMessage()]);
   const loading = ref(false);
   const stopping = ref(false);
   const stopRequested = ref(false);
@@ -50,6 +34,23 @@ export const useAgentRunStore = defineStore("agent-run", () => {
   const canSend = computed(() => !loading.value && !pendingAction.value);
   const canStop = computed(() => Boolean(activeAbortController.value) && loading.value);
   const statusLabel = computed(() => run.value?.status ?? "idle");
+
+  function getMessageState(): AgentRunMessageState {
+    return {
+      run: run.value,
+      plan: plan.value,
+      events: events.value,
+      pendingAction: pendingAction.value,
+      results: results.value,
+      messages: messages.value
+    };
+  }
+
+  function commitMessageState(state: AgentRunMessageState) {
+    run.value = state.run;
+    plan.value = state.plan;
+    pendingAction.value = state.pendingAction;
+  }
 
   function reset() {
     run.value = null;
@@ -67,60 +68,24 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     loading.value = false;
   }
 
-  function pushMessage(message: Omit<ChatMessage, "id" | "createdAt"> & { id?: string }) {
-    const chatMessage: ChatMessage = {
-      ...message,
-      id: message.id ?? createMessageId(message.kind),
-      createdAt: new Date().toISOString()
-    };
-
-    messages.value.push(chatMessage);
-    return chatMessage;
-  }
-
-  function appendTextDelta(messageId: string, text: string, done = false, kind: ChatMessageKind = "thinking") {
-    let message = messages.value.find((item) => item.id === messageId);
-
-    if (!message) {
-      message = pushMessage({
-        id: messageId,
-        role: "assistant",
-        kind,
-        content: "",
-        streaming: true
-      });
-    }
-
-    message.content += text;
-    message.streaming = !done;
-  }
-
   async function streamLocalAssistantText(text: string) {
     const messageId = createMessageId("local_stream");
     const chunks = text.match(/.{1,8}/gu) ?? [text];
 
     for (const chunk of chunks) {
-      appendTextDelta(messageId, chunk, false, "text");
+      appendTextDelta({ messages: messages.value }, messageId, chunk, false, "text");
       await delay(35);
     }
 
-    appendTextDelta(messageId, "", true, "text");
+    appendTextDelta({ messages: messages.value }, messageId, "", true, "text");
   }
 
   function isAbortError(caught: unknown) {
     return caught instanceof Error && (caught.name === "AbortError" || /aborted|abort/i.test(caught.message));
   }
 
-  function finishStreamingMessages() {
-    for (const message of messages.value) {
-      if (message.streaming) {
-        message.streaming = false;
-      }
-    }
-  }
-
   function markStopped() {
-    finishStreamingMessages();
+    finishStreamingMessages({ messages: messages.value });
     if (run.value) {
       run.value.status = "stopped";
       run.value.updatedAt = new Date().toISOString();
@@ -128,98 +93,18 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     }
   }
 
-  function formatPlan(planValue: AgentPlan) {
-    const steps = planValue.steps.map((step, index) => `${index + 1}. ${step.toolName}：${step.reason}`).join("\n");
-    const blocked = planValue.blockedActions.length
-      ? `\n\n已阻断的高风险动作：\n${planValue.blockedActions
-          .map((action) => `- ${action.target?.description ?? action.toolName}：${action.reason}`)
-          .join("\n")}`
-      : "";
-
-    return `${planValue.summary}\n\n计划：\n${steps}${blocked}`;
-  }
-
-  function updateActionMessage(actionId: string, status: ActionMessageStatus, content?: string) {
-    const message = messages.value.find((item) => item.action?.id === actionId);
-
-    if (!message) {
-      return;
-    }
-
-    message.actionStatus = status;
-    if (content) {
-      message.content = content;
-    }
-  }
-
   async function applyEvent(event: AgentRunEvent) {
-    events.value.push(event);
+    const state = getMessageState();
+    const result = applyAgentRunEvent(state, event);
+    commitMessageState(state);
 
-    if (event.type === "status" && run.value) {
-      run.value.status = event.status;
-      run.value.updatedAt = new Date().toISOString();
+    if (result.error) {
+      error.value = result.error.error;
     }
 
-    if (event.type === "message") {
-      pushMessage({
-        role: "assistant",
-        kind: "text",
-        content: event.text
-      });
-    }
-
-    if (event.type === "message_delta") {
-      appendTextDelta(event.messageId, event.text, event.done, event.channel === "answer" ? "text" : "thinking");
-    }
-
-    if (event.type === "plan") {
-      plan.value = event.plan;
-      if (run.value) {
-        run.value.plan = event.plan;
-      }
-      pushMessage({
-        role: "assistant",
-        kind: "plan",
-        content: formatPlan(event.plan),
-        plan: event.plan
-      });
-    }
-
-    if (event.type === "action_request") {
-      pushMessage({
-        id: `action_${event.action.id}`,
-        role: "assistant",
-        kind: "action_confirmation",
-        content: event.action.reason,
-        action: event.action,
-        actionStatus: event.action.requiresConfirmation ? "pending" : "executing"
-      });
-
-      if (event.action.requiresConfirmation) {
-        pendingAction.value = event.action;
-      } else {
-        await executeAction(event.action, {
-          completionText: "动作已自动完成。我会继续把执行结果保留在当前对话里。"
-        });
-      }
-    }
-
-    if (event.type === "action_result") {
-      results.value.push(event.result);
-      pushMessage({
-        role: "assistant",
-        kind: "result",
-        content: `${event.result.status}：${event.result.message}`,
-        result: event.result
-      });
-    }
-
-    if (event.type === "error") {
-      error.value = event.error;
-      pushMessage({
-        role: "assistant",
-        kind: "error",
-        content: event.error.message
+    if (result.autoAction) {
+      await executeAction(result.autoAction, {
+        completionText: "动作已自动完成。我会继续把执行结果保留在当前对话里。"
       });
     }
   }
@@ -240,7 +125,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     pendingAction.value = null;
     results.value = [];
     events.value = [];
-    pushMessage({
+    pushMessage({ messages: messages.value }, {
       role: "user",
       kind: "text",
       content: goal
@@ -260,7 +145,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
       if (stopRequested.value || isAbortError(caught)) {
         if (!silentStopRequested.value) {
           markStopped();
-          pushMessage({
+          pushMessage({ messages: messages.value }, {
             role: "assistant",
             kind: "text",
             content: "已终止当前回答。"
@@ -274,7 +159,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
         message: caught instanceof Error ? caught.message : "Agent 运行失败。",
         retryable: true
       };
-      pushMessage({
+      pushMessage({ messages: messages.value }, {
         role: "assistant",
         kind: "error",
         content: error.value.message
@@ -317,7 +202,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     }
 
     loading.value = true;
-    updateActionMessage(action.id, "executing");
+    updateActionMessage({ messages: messages.value }, action.id, "executing");
     applyEvent({ type: "status", runId: run.value.id, status: "running" });
 
     try {
@@ -341,7 +226,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
       if (pendingAction.value?.id === action.id) {
         pendingAction.value = null;
       }
-      updateActionMessage(action.id, result.status === "succeeded" ? "confirmed" : "rejected");
+      updateActionMessage({ messages: messages.value }, action.id, result.status === "succeeded" ? "confirmed" : "rejected");
       applyEvent({ type: "action_result", runId: run.value.id, result });
       applyEvent({
         type: "status",
@@ -378,7 +263,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
       message: "用户跳过了该动作。"
     };
 
-    updateActionMessage(action.id, "rejected");
+    updateActionMessage({ messages: messages.value }, action.id, "rejected");
     pendingAction.value = null;
     applyEvent({ type: "action_result", runId: run.value.id, result });
     applyEvent({ type: "status", runId: run.value.id, status: "completed" });
