@@ -17,7 +17,7 @@ const emit = defineEmits<{
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const isComposing = ref(false);
 
-function resizeTextarea(textarea = textareaRef.value) {
+const resizeTextarea = (textarea = textareaRef.value) => {
   if (!textarea) {
     return;
   }
@@ -32,15 +32,15 @@ function resizeTextarea(textarea = textareaRef.value) {
   textarea.style.height = `${nextHeight}px`;
   textarea.style.overflowY =
     textarea.scrollHeight > nextHeight ? "auto" : "hidden";
-}
+};
 
-function handleInput(event: Event) {
+const handleInput = (event: Event) => {
   const textarea = event.target as HTMLTextAreaElement;
   emit("update:modelValue", textarea.value);
   resizeTextarea(textarea);
-}
+};
 
-function submit() {
+const submit = () => {
   const value = props.modelValue.trim();
   if (!value || !props.canSend) {
     return;
@@ -48,22 +48,22 @@ function submit() {
 
   emit("submit", value);
   emit("update:modelValue", "");
-}
+};
 
-function handleEnterKeydown(event: KeyboardEvent) {
+const handleEnterKeydown = (event: KeyboardEvent) => {
   if (isComposing.value || event.isComposing || event.keyCode === 229) {
     return;
   }
 
   event.preventDefault();
   submit();
-}
+};
 
-function handleActionClick() {
+const handleActionClick = () => {
   if (props.loading) {
     emit("stop");
   }
-}
+};
 
 watch(
   () => props.modelValue,

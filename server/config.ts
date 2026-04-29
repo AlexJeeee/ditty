@@ -5,40 +5,40 @@ const DEFAULT_PORT = 8787;
 const DEFAULT_OPENAI_TIMEOUT_MS = 120_000;
 const DEFAULT_OPENAI_MAX_RETRIES = 1;
 
-export function getPort() {
+export const getPort = () => {
   const parsed = Number(process.env.AI_AGENT_PORT ?? DEFAULT_PORT);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_PORT;
-}
+};
 
-export function getModel() {
+export const getModel = () => {
   return process.env.OPENAI_MODEL || DEFAULT_MODEL;
-}
+};
 
-export function getOpenAITimeoutMs() {
+export const getOpenAITimeoutMs = () => {
   const parsed = Number(
     process.env.OPENAI_TIMEOUT_MS ?? DEFAULT_OPENAI_TIMEOUT_MS,
   );
   return Number.isInteger(parsed) && parsed > 0
     ? parsed
     : DEFAULT_OPENAI_TIMEOUT_MS;
-}
+};
 
-export function getOpenAIMaxRetries() {
+export const getOpenAIMaxRetries = () => {
   const parsed = Number(
     process.env.OPENAI_MAX_RETRIES ?? DEFAULT_OPENAI_MAX_RETRIES,
   );
   return Number.isInteger(parsed) && parsed >= 0
     ? parsed
     : DEFAULT_OPENAI_MAX_RETRIES;
-}
+};
 
-export function getOpenAIBaseUrl() {
+export const getOpenAIBaseUrl = () => {
   return process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-}
+};
 
 let _openaiClient: OpenAI | null = null;
 
-export function requireOpenAIClient(): OpenAI {
+export const requireOpenAIClient = (): OpenAI => {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error(
       "OPENAI_API_KEY 未配置，请在本地 .env 中设置后重启 server。",
@@ -55,4 +55,4 @@ export function requireOpenAIClient(): OpenAI {
   }
 
   return _openaiClient;
-}
+};

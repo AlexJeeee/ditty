@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { applyAgentRunEvent, type AgentRunMessageState } from "./agent-run-messages";
+import {
+  applyAgentRunEvent,
+  type AgentRunMessageState,
+} from "./agent-run-messages";
 import type { AgentAction, AgentPlan, AgentRun } from "@/shared/types";
 
-function createState(): AgentRunMessageState {
+const createState = (): AgentRunMessageState => {
   const now = new Date().toISOString();
   const run: AgentRun = {
     id: "run_1",
@@ -11,7 +14,7 @@ function createState(): AgentRunMessageState {
     pageUrl: "https://example.com",
     pageTitle: "Example",
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 
   return {
@@ -20,9 +23,9 @@ function createState(): AgentRunMessageState {
     events: [],
     pendingAction: null,
     results: [],
-    messages: []
+    messages: [],
   };
-}
+};
 
 const action: AgentAction = {
   id: "action_1",
@@ -30,12 +33,12 @@ const action: AgentAction = {
   riskLevel: "medium",
   requiresConfirmation: true,
   target: {
-    description: "Example"
+    description: "Example",
   },
   input: {
-    url: "https://example.com"
+    url: "https://example.com",
   },
-  reason: "Open Example"
+  reason: "Open Example",
 };
 
 describe("agent-run message helpers", () => {
@@ -47,7 +50,7 @@ describe("agent-run message helpers", () => {
       runId: "run_1",
       messageId: "message_1",
       text: "hello",
-      channel: "answer"
+      channel: "answer",
     });
     applyAgentRunEvent(state, {
       type: "message_delta",
@@ -55,7 +58,7 @@ describe("agent-run message helpers", () => {
       messageId: "message_1",
       text: " world",
       channel: "answer",
-      done: true
+      done: true,
     });
 
     expect(state.messages).toMatchObject([
@@ -63,8 +66,8 @@ describe("agent-run message helpers", () => {
         id: "message_1",
         kind: "text",
         content: "hello world",
-        streaming: false
-      }
+        streaming: false,
+      },
     ]);
   });
 
@@ -73,13 +76,13 @@ describe("agent-run message helpers", () => {
     const plan: AgentPlan = {
       summary: "Plan summary",
       steps: [action],
-      blockedActions: []
+      blockedActions: [],
     };
 
     applyAgentRunEvent(state, {
       type: "plan",
       runId: "run_1",
-      plan
+      plan,
     });
 
     expect(state.plan).toBe(plan);
@@ -87,7 +90,7 @@ describe("agent-run message helpers", () => {
     expect(state.messages[0]).toMatchObject({
       role: "assistant",
       kind: "plan",
-      plan
+      plan,
     });
   });
 
@@ -97,7 +100,7 @@ describe("agent-run message helpers", () => {
     applyAgentRunEvent(state, {
       type: "action_request",
       runId: "run_1",
-      action
+      action,
     });
     applyAgentRunEvent(state, {
       type: "action_result",
@@ -105,13 +108,16 @@ describe("agent-run message helpers", () => {
       result: {
         actionId: action.id,
         status: "succeeded",
-        message: "Done"
-      }
+        message: "Done",
+      },
     });
 
     expect(state.pendingAction).toBe(action);
     expect(state.results).toHaveLength(1);
-    expect(state.messages.map((message) => message.kind)).toEqual(["action_confirmation", "result"]);
+    expect(state.messages.map((message) => message.kind)).toEqual([
+      "action_confirmation",
+      "result",
+    ]);
   });
 
   it("returns automatic actions and records errors", () => {
@@ -119,13 +125,13 @@ describe("agent-run message helpers", () => {
     const automaticAction = {
       ...action,
       id: "action_auto",
-      requiresConfirmation: false
+      requiresConfirmation: false,
     };
 
     const actionResult = applyAgentRunEvent(state, {
       type: "action_request",
       runId: "run_1",
-      action: automaticAction
+      action: automaticAction,
     });
     const errorResult = applyAgentRunEvent(state, {
       type: "error",
@@ -133,15 +139,15 @@ describe("agent-run message helpers", () => {
       error: {
         code: "UNKNOWN_ERROR",
         message: "Boom",
-        retryable: true
-      }
+        retryable: true,
+      },
     });
 
     expect(actionResult.autoAction).toBe(automaticAction);
     expect(errorResult.error?.error.message).toBe("Boom");
     expect(state.messages.at(-1)).toMatchObject({
       kind: "error",
-      content: "Boom"
+      content: "Boom",
     });
   });
 });

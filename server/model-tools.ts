@@ -32,11 +32,11 @@ interface OpenUrlToolArguments {
   label?: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+const isRecord = (value: unknown): value is Record<string, unknown> => {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
+};
 
-function parseOpenUrlArguments(value: unknown): OpenUrlToolArguments | null {
+const parseOpenUrlArguments = (value: unknown): OpenUrlToolArguments | null => {
   if (!isRecord(value) || typeof value.url !== "string") {
     return null;
   }
@@ -44,16 +44,18 @@ function parseOpenUrlArguments(value: unknown): OpenUrlToolArguments | null {
   return {
     url: value.url,
     reason: typeof value.reason === "string" ? value.reason : undefined,
-    label: typeof value.label === "string" ? value.label : undefined
+    label: typeof value.label === "string" ? value.label : undefined,
   };
-}
+};
 
-function createOpenUrlAction(args: OpenUrlToolArguments): PendingToolActionResult {
+const createOpenUrlAction = (
+  args: OpenUrlToolArguments,
+): PendingToolActionResult => {
   const normalized = normalizeHttpUrl(args.url);
 
   if (!normalized.ok) {
     return {
-      blockedReason: `模型请求打开的 URL 未通过校验：${normalized.message}`
+      blockedReason: `模型请求打开的 URL 未通过校验：${normalized.message}`,
     };
   }
 
@@ -66,27 +68,29 @@ function createOpenUrlAction(args: OpenUrlToolArguments): PendingToolActionResul
       riskLevel: "medium",
       requiresConfirmation: true,
       target: {
-        description: label
+        description: label,
       },
       input: {
-        url: normalized.url
+        url: normalized.url,
       },
-      reason
-    }
+      reason,
+    },
   };
-}
+};
 
-function createOpenUrlActionFromArguments(value: unknown): PendingToolActionResult {
+const createOpenUrlActionFromArguments = (
+  value: unknown,
+): PendingToolActionResult => {
   const args = parseOpenUrlArguments(value);
 
   if (!args) {
     return {
-      blockedReason: "模型请求 open_url，但参数格式未通过校验。"
+      blockedReason: "模型请求 open_url，但参数格式未通过校验。",
     };
   }
 
   return createOpenUrlAction(args);
-}
+};
 
 const MODEL_TOOL_DEFINITIONS: ModelToolDefinition[] = [
   {
@@ -103,46 +107,56 @@ const MODEL_TOOL_DEFINITIONS: ModelToolDefinition[] = [
           properties: {
             url: {
               type: "string",
-              description: "要打开的 http/https URL。可以是带协议的网址，也可以是明确的域名。"
+              description:
+                "要打开的 http/https URL。可以是带协议的网址，也可以是明确的域名。",
             },
             reason: {
               type: "string",
-              description: "向用户说明为什么需要打开这个网页。"
+              description: "向用户说明为什么需要打开这个网页。",
             },
             label: {
               type: "string",
-              description: "目标网页的简短名称，例如站点名或页面名。"
-            }
+              description: "目标网页的简短名称，例如站点名或页面名。",
+            },
           },
-          required: ["url", "reason"]
-        }
-      }
+          required: ["url", "reason"],
+        },
+      },
     },
     planStep: {
       toolName: "open_url",
       riskLevel: "medium",
       requiresConfirmation: true,
-      reason: "如果任务需要打开一个确定的 http/https 页面，模型会生成 open_url 动作，执行前仍需用户确认。"
+      reason:
+        "如果任务需要打开一个确定的 http/https 页面，模型会生成 open_url 动作，执行前仍需用户确认。",
     },
-    createActionFromArguments: createOpenUrlActionFromArguments
-  }
+    createActionFromArguments: createOpenUrlActionFromArguments,
+  },
 ];
 
-const MODEL_TOOL_DEFINITION_BY_NAME = new Map(MODEL_TOOL_DEFINITIONS.map((definition) => [definition.toolName, definition]));
-
-export const MODEL_CHAT_TOOLS = MODEL_TOOL_DEFINITIONS.map((definition) => definition.chatTool);
-export const MODEL_TOOL_PLAN_STEPS = MODEL_TOOL_DEFINITIONS.flatMap((definition) =>
-  definition.planStep ? [definition.planStep] : []
+const MODEL_TOOL_DEFINITION_BY_NAME = new Map(
+  MODEL_TOOL_DEFINITIONS.map((definition) => [definition.toolName, definition]),
 );
 
-export function hasModelToolDefinition(toolName: string) {
-  return MODEL_TOOL_DEFINITION_BY_NAME.has(toolName as AgentToolName);
-}
+export const MODEL_CHAT_TOOLS = MODEL_TOOL_DEFINITIONS.map(
+  (definition) => definition.chatTool,
+);
+export const MODEL_TOOL_PLAN_STEPS = MODEL_TOOL_DEFINITIONS.flatMap(
+  (definition) => (definition.planStep ? [definition.planStep] : []),
+);
 
-export function accumulateToolCalls(
+export const hasModelToolDefinition = (toolName: string) => {
+  return MODEL_TOOL_DEFINITION_BY_NAME.has(toolName as AgentToolName);
+};
+
+export const accumulateToolCalls = (
   toolCalls: ToolCallAccumulator[],
-  deltas: Array<{ index: number; id?: string; function?: { name?: string; arguments?: string } }>
-) {
+  deltas: Array<{
+    index: number;
+    id?: string;
+    function?: { name?: string; arguments?: string };
+  }>,
+) => {
   for (const delta of deltas) {
     let toolCall = toolCalls.find((item) => item.index === delta.index);
 
@@ -151,7 +165,7 @@ export function accumulateToolCalls(
         id: delta.id || "",
         index: delta.index,
         name: "",
-        arguments: ""
+        arguments: "",
       };
       toolCalls.push(toolCall);
     }
@@ -168,23 +182,30 @@ export function accumulateToolCalls(
       toolCall.arguments += delta.function.arguments;
     }
   }
-}
+};
 
-function parseToolArguments(argumentsText: string): Record<string, unknown> | null {
+const parseToolArguments = (
+  argumentsText: string,
+): Record<string, unknown> | null => {
   try {
     const parsed = JSON.parse(argumentsText) as unknown;
     return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
   }
-}
+};
 
-export function createActionFromToolCall(toolCall: ToolCallAccumulator, actionId: string): ToolActionResult {
-  const definition = MODEL_TOOL_DEFINITION_BY_NAME.get(toolCall.name as AgentToolName);
+export const createActionFromToolCall = (
+  toolCall: ToolCallAccumulator,
+  actionId: string,
+): ToolActionResult => {
+  const definition = MODEL_TOOL_DEFINITION_BY_NAME.get(
+    toolCall.name as AgentToolName,
+  );
 
   if (!definition) {
     return {
-      blockedReason: `模型请求了未启用的工具：${toolCall.name || "(unknown)"}。`
+      blockedReason: `模型请求了未启用的工具：${toolCall.name || "(unknown)"}。`,
     };
   }
 
@@ -192,7 +213,7 @@ export function createActionFromToolCall(toolCall: ToolCallAccumulator, actionId
 
   if (!rawArgs) {
     return {
-      blockedReason: `模型请求 ${definition.toolName}，但参数不是有效 JSON 对象。`
+      blockedReason: `模型请求 ${definition.toolName}，但参数不是有效 JSON 对象。`,
     };
   }
 
@@ -202,10 +223,10 @@ export function createActionFromToolCall(toolCall: ToolCallAccumulator, actionId
     ? {
         action: {
           ...result.action,
-          id: actionId
-        }
+          id: actionId,
+        },
       }
     : {
-        blockedReason: result.blockedReason
+        blockedReason: result.blockedReason,
       };
-}
+};

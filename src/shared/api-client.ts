@@ -8,28 +8,33 @@ interface ApiErrorBody {
 
 const DEFAULT_AGENT_API_BASE_URL = "http://127.0.0.1:8787";
 
-function getApiBaseUrl() {
-  return (import.meta.env.VITE_AGENT_API_BASE_URL || DEFAULT_AGENT_API_BASE_URL).replace(/\/$/, "");
-}
+const getApiBaseUrl = () => {
+  return (
+    import.meta.env.VITE_AGENT_API_BASE_URL || DEFAULT_AGENT_API_BASE_URL
+  ).replace(/\/$/, "");
+};
 
-async function readError(response: Response, fallback: string) {
+const readError = async (response: Response, fallback: string) => {
   try {
     const body = (await response.json()) as ApiErrorBody;
     return body.error?.message || fallback;
   } catch {
     return fallback;
   }
-}
+};
 
-async function parseJsonResponse<T>(response: Response, fallback: string): Promise<T> {
+const parseJsonResponse = async <T>(
+  response: Response,
+  fallback: string,
+): Promise<T> => {
   if (!response.ok) {
     throw new Error(await readError(response, fallback));
   }
 
   return response.json() as Promise<T>;
-}
+};
 
-function parseSseBlock(block: string) {
+const parseSseBlock = (block: string) => {
   const data = block
     .split("\n")
     .filter((line) => line.startsWith("data:"))
@@ -37,9 +42,11 @@ function parseSseBlock(block: string) {
     .join("\n");
 
   return data || null;
-}
+};
 
-async function* readSseEvents(response: Response): AsyncGenerator<AgentRunEvent> {
+async function* readSseEvents(
+  response: Response,
+): AsyncGenerator<AgentRunEvent> {
   if (!response.ok || !response.body) {
     throw new Error(await readError(response, "Agent 流式连接失败。"));
   }
@@ -91,52 +98,77 @@ interface StopAgentRunResponse {
   status: AgentRun["status"];
 }
 
-export async function createAgentRun(goal: string, pageContext: PageContext, options?: AgentRequestOptions): Promise<AgentRun> {
+export const createAgentRun = async (
+  goal: string,
+  pageContext: PageContext,
+  options?: AgentRequestOptions,
+): Promise<AgentRun> => {
   try {
     const response = await fetch(`${getApiBaseUrl()}/api/agent/runs`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         goal,
-        pageContext
+        pageContext,
       }),
-      signal: options?.signal
+      signal: options?.signal,
     });
 
     return parseJsonResponse<AgentRun>(response, "Agent Run 创建失败。");
   } catch (error) {
-    throw new Error(error instanceof Error ? error.message : "Agent Run 创建失败。");
+    throw new Error(
+      error instanceof Error ? error.message : "Agent Run 创建失败。",
+    );
   }
-}
+};
 
-export async function* streamAgentRun(run: AgentRun, pageContext: PageContext, options?: AgentRequestOptions): AsyncGenerator<AgentRunEvent> {
+export async function* streamAgentRun(
+  run: AgentRun,
+  pageContext: PageContext,
+  options?: AgentRequestOptions,
+): AsyncGenerator<AgentRunEvent> {
   let response: Response;
 
   try {
-    response = await fetch(`${getApiBaseUrl()}/api/agent/runs/${run.id}/stream`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream"
+    response = await fetch(
+      `${getApiBaseUrl()}/api/agent/runs/${run.id}/stream`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        body: JSON.stringify({
+          pageContext,
+        }),
+        signal: options?.signal,
       },
-      body: JSON.stringify({
-        pageContext
-      }),
-      signal: options?.signal
-    });
+    );
   } catch (error) {
-    throw new Error(error instanceof Error ? error.message : "Agent 流式连接失败，请确认本地代理服务已启动。");
+    throw new Error(
+      error instanceof Error
+        ? error.message
+        : "Agent 流式连接失败，请确认本地代理服务已启动。",
+    );
   }
 
   yield* readSseEvents(response);
 }
 
-export async function stopAgentRun(runId: string): Promise<StopAgentRunResponse> {
-  const response = await fetch(`${getApiBaseUrl()}/api/agent/runs/${runId}/stop`, {
-    method: "POST"
-  });
+export const stopAgentRun = async (
+  runId: string,
+): Promise<StopAgentRunResponse> => {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/agent/runs/${runId}/stop`,
+    {
+      method: "POST",
+    },
+  );
 
-  return parseJsonResponse<StopAgentRunResponse>(response, "Agent Run 停止失败。");
-}
+  return parseJsonResponse<StopAgentRunResponse>(
+    response,
+    "Agent Run 停止失败。",
+  );
+};

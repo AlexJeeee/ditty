@@ -10,7 +10,7 @@ export const SYSTEM_PROMPT =
 import { createScopedId } from "../src/shared/id";
 import type { AgentAction, AgentPlan, PageContext } from "../src/shared/types";
 
-export function createPlan(pageContext: PageContext): AgentPlan {
+export const createPlan = (pageContext: PageContext): AgentPlan => {
   const steps: AgentAction[] = [
     {
       id: createScopedId("action"),
@@ -45,9 +45,9 @@ export function createPlan(pageContext: PageContext): AgentPlan {
     steps,
     blockedActions: [],
   };
-}
+};
 
-export function buildPrompt(goal: string, pageContext: PageContext) {
+export const buildPrompt = (goal: string, pageContext: PageContext) => {
   const elements = pageContext.interactiveElements
     .map((element, index) => {
       const label =
@@ -82,4 +82,4 @@ export function buildPrompt(goal: string, pageContext: PageContext) {
     "可交互元素摘要：",
     elements || "(无)",
   ].join("\n");
-}
+};

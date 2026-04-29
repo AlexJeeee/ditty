@@ -12,20 +12,20 @@ const THINK_END_RE = /<\/think>/gi;
 marked.setOptions({
   async: false,
   breaks: true,
-  gfm: true
+  gfm: true,
 });
 
-export function renderMarkdown(content: string) {
+export const renderMarkdown = (content: string) => {
   const html = marked.parse(content, {
     async: false,
     breaks: true,
-    gfm: true
+    gfm: true,
   });
 
   return DOMPurify.sanitize(html);
-}
+};
 
-export function splitThinkSections(content: string): MarkdownSection[] {
+export const splitThinkSections = (content: string): MarkdownSection[] => {
   const sections: MarkdownSection[] = [];
   let cursor = 0;
 
@@ -36,7 +36,7 @@ export function splitThinkSections(content: string): MarkdownSection[] {
     if (!startMatch) {
       sections.push({
         type: "text",
-        content: content.slice(cursor)
+        content: content.slice(cursor),
       });
       break;
     }
@@ -44,7 +44,7 @@ export function splitThinkSections(content: string): MarkdownSection[] {
     if (startMatch.index > cursor) {
       sections.push({
         type: "text",
-        content: content.slice(cursor, startMatch.index)
+        content: content.slice(cursor, startMatch.index),
       });
     }
 
@@ -55,7 +55,7 @@ export function splitThinkSections(content: string): MarkdownSection[] {
 
     sections.push({
       type: "think",
-      content: content.slice(thinkStart, thinkEnd)
+      content: content.slice(thinkStart, thinkEnd),
     });
 
     if (!endMatch) {
@@ -66,4 +66,4 @@ export function splitThinkSections(content: string): MarkdownSection[] {
   }
 
   return sections.filter((section) => section.content.trim().length > 0);
-}
+};

@@ -1,6 +1,9 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import type { PageContextResponse, SelectionActionPayload } from "@/shared/extension-messages";
+import type {
+  PageContextResponse,
+  SelectionActionPayload,
+} from "@/shared/extension-messages";
 import type { ExtensionError, PageContext } from "@/shared/types";
 
 export const usePageContextStore = defineStore("page-context", () => {
@@ -11,17 +14,19 @@ export const usePageContextStore = defineStore("page-context", () => {
   const error = ref<ExtensionError | null>(null);
 
   const pageTitle = computed(() => context.value?.title || "未读取页面");
-  const elementCount = computed(() => context.value?.interactiveElements.length ?? 0);
+  const elementCount = computed(
+    () => context.value?.interactiveElements.length ?? 0,
+  );
 
-  function getOrigin(url: string, fallback: string) {
+  const getOrigin = (url: string, fallback: string) => {
     try {
       return new URL(url).origin;
     } catch {
       return fallback;
     }
-  }
+  };
 
-  async function refresh(options: { tabId?: number } = {}) {
+  const refresh = async (options: { tabId?: number } = {}) => {
     const requestId = ++refreshRequestId;
 
     loading.value = true;
@@ -33,8 +38,8 @@ export const usePageContextStore = defineStore("page-context", () => {
         payload: {
           includeSelection: true,
           includeInteractiveElements: true,
-          tabId: options.tabId
-        }
+          tabId: options.tabId,
+        },
       })) as PageContextResponse;
 
       if (requestId !== refreshRequestId) {
@@ -45,7 +50,7 @@ export const usePageContextStore = defineStore("page-context", () => {
         error.value = response?.error ?? {
           code: "UNKNOWN_ERROR",
           message: "页面上下文读取失败。",
-          retryable: true
+          retryable: true,
         };
         return null;
       }
@@ -60,8 +65,9 @@ export const usePageContextStore = defineStore("page-context", () => {
 
       error.value = {
         code: "UNKNOWN_ERROR",
-        message: caught instanceof Error ? caught.message : "页面上下文读取失败。",
-        retryable: true
+        message:
+          caught instanceof Error ? caught.message : "页面上下文读取失败。",
+        retryable: true,
       };
       return null;
     } finally {
@@ -69,9 +75,9 @@ export const usePageContextStore = defineStore("page-context", () => {
         loading.value = false;
       }
     }
-  }
+  };
 
-  function applySelectionAction(payload: SelectionActionPayload) {
+  const applySelectionAction = (payload: SelectionActionPayload) => {
     const selectedText = payload.selectedText.trim();
 
     if (!selectedText) {
@@ -82,13 +88,15 @@ export const usePageContextStore = defineStore("page-context", () => {
       context.value = {
         ...context.value,
         url: payload.pageUrl || context.value.url,
-        origin: payload.pageUrl ? getOrigin(payload.pageUrl, context.value.origin) : context.value.origin,
+        origin: payload.pageUrl
+          ? getOrigin(payload.pageUrl, context.value.origin)
+          : context.value.origin,
         title: payload.pageTitle || context.value.title,
         selectedText,
-        collectedAt: payload.requestedAt
+        collectedAt: payload.requestedAt,
       };
     }
-  }
+  };
 
   return {
     context,
@@ -98,6 +106,6 @@ export const usePageContextStore = defineStore("page-context", () => {
     pageTitle,
     elementCount,
     refresh,
-    applySelectionAction
+    applySelectionAction,
   };
 });

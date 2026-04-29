@@ -1,27 +1,35 @@
 import { getModel, getOpenAIBaseUrl, getOpenAITimeoutMs } from "./config";
 import type { AgentRunEvent } from "../src/shared/types";
 
-export function writeSseEvent(raw: NodeJS.WritableStream, event: AgentRunEvent) {
+export const writeSseEvent = (
+  raw: NodeJS.WritableStream,
+  event: AgentRunEvent,
+) => {
   raw.write(`data: ${JSON.stringify(event)}\n\n`);
-}
+};
 
-export function writeAssistantDone(raw: NodeJS.WritableStream, runId: string, messageId: string) {
+export const writeAssistantDone = (
+  raw: NodeJS.WritableStream,
+  runId: string,
+  messageId: string,
+) => {
   writeSseEvent(raw, {
     type: "message_delta",
     runId,
     messageId,
     text: "",
     channel: "answer",
-    done: true
+    done: true,
   });
-}
+};
 
-export function writeSseDone(raw: NodeJS.WritableStream) {
+export const writeSseDone = (raw: NodeJS.WritableStream) => {
   raw.write("data: [DONE]\n\n");
-}
+};
 
-export function toErrorEvent(runId: string, error: unknown): AgentRunEvent {
-  const rawMessage = error instanceof Error ? error.message : "OpenAI 调用失败。";
+export const toErrorEvent = (runId: string, error: unknown): AgentRunEvent => {
+  const rawMessage =
+    error instanceof Error ? error.message : "OpenAI 调用失败。";
   const isTimeout = /timed out|timeout/i.test(rawMessage);
 
   return {
@@ -36,8 +44,8 @@ export function toErrorEvent(runId: string, error: unknown): AgentRunEvent {
       details: {
         model: getModel(),
         timeoutMs: getOpenAITimeoutMs(),
-        baseURL: getOpenAIBaseUrl()
-      }
-    }
+        baseURL: getOpenAIBaseUrl(),
+      },
+    },
   };
-}
+};

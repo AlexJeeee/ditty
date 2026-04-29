@@ -1,20 +1,27 @@
-import { getRegisteredElement, isRegisteredElementUsable } from "./element-registry";
-import { detectRiskLevel, isElementVisible, isSensitiveField } from "./risk-detector";
+import {
+  getRegisteredElement,
+  isRegisteredElementUsable,
+} from "./element-registry";
+import {
+  detectRiskLevel,
+  isElementVisible,
+  isSensitiveField,
+} from "./risk-detector";
 import type { AgentAction, AgentActionResult } from "@/shared/types";
 
 const createResult = (
   action: AgentAction,
   status: AgentActionResult["status"],
   message: string,
-  output?: unknown
+  output?: unknown,
 ): AgentActionResult => ({
   actionId: action.id,
   status,
   message,
-  output
+  output,
 });
 
-export function highlightElement(elementId: string, durationMs = 1600) {
+export const highlightElement = (elementId: string, durationMs = 1600) => {
   const element = getRegisteredElement(elementId);
   if (!element || !isElementVisible(element)) {
     return false;
@@ -25,7 +32,11 @@ export function highlightElement(elementId: string, durationMs = 1600) {
   const previousOutlineOffset = htmlElement.style.outlineOffset;
   const previousTransition = htmlElement.style.transition;
 
-  htmlElement.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+  htmlElement.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+    inline: "center",
+  });
   htmlElement.style.transition = "outline 120ms ease";
   htmlElement.style.outline = "3px solid #2563eb";
   htmlElement.style.outlineOffset = "3px";
@@ -37,24 +48,34 @@ export function highlightElement(elementId: string, durationMs = 1600) {
   }, durationMs);
 
   return true;
-}
+};
 
-function resolveTarget(action: AgentAction) {
+const resolveTarget = (action: AgentAction) => {
   const elementId = action.target?.elementId;
   if (!elementId || !isRegisteredElementUsable(elementId)) {
     return null;
   }
 
   return getRegisteredElement(elementId);
-}
+};
 
-export async function executeAction(action: AgentAction): Promise<AgentActionResult> {
+export const executeAction = async (
+  action: AgentAction,
+): Promise<AgentActionResult> => {
   if (action.riskLevel === "high") {
     return createResult(action, "blocked", "高风险动作已被本地策略阻断。");
   }
 
-  if (action.toolName === "read_page" || action.toolName === "summarize_selection" || action.toolName === "extract_table") {
-    return createResult(action, "succeeded", "该动作由 Agent 计划层完成，无需修改页面。");
+  if (
+    action.toolName === "read_page" ||
+    action.toolName === "summarize_selection" ||
+    action.toolName === "extract_table"
+  ) {
+    return createResult(
+      action,
+      "succeeded",
+      "该动作由 Agent 计划层完成，无需修改页面。",
+    );
   }
 
   if (action.toolName === "copy_result") {
@@ -68,7 +89,10 @@ export async function executeAction(action: AgentAction): Promise<AgentActionRes
     if (element) {
       element.scrollIntoView({ behavior: "smooth", block: "center" });
     } else {
-      window.scrollBy({ top: Math.round(window.innerHeight * 0.7), behavior: "smooth" });
+      window.scrollBy({
+        top: Math.round(window.innerHeight * 0.7),
+        behavior: "smooth",
+      });
     }
     return createResult(action, "succeeded", "页面已滚动。");
   }
@@ -80,7 +104,11 @@ export async function executeAction(action: AgentAction): Promise<AgentActionRes
 
   const detectedRisk = detectRiskLevel(element);
   if (detectedRisk === "high" || isSensitiveField(element)) {
-    return createResult(action, "blocked", "目标元素被识别为敏感或高风险控件，已阻断。");
+    return createResult(
+      action,
+      "blocked",
+      "目标元素被识别为敏感或高风险控件，已阻断。",
+    );
   }
 
   if (action.toolName === "highlight_element") {
@@ -117,4 +145,4 @@ export async function executeAction(action: AgentAction): Promise<AgentActionRes
   }
 
   return createResult(action, "blocked", "未知或未启用的工具动作。");
-}
+};

@@ -1,4 +1,7 @@
-import { HIGH_RISK_LABEL_PATTERN, SENSITIVE_FIELD_PATTERN } from "@/shared/constants";
+import {
+  HIGH_RISK_LABEL_PATTERN,
+  SENSITIVE_FIELD_PATTERN,
+} from "@/shared/constants";
 import type { ActionRiskLevel } from "@/shared/types";
 
 const getElementText = (element: Element) =>
@@ -8,13 +11,13 @@ const getElementText = (element: Element) =>
     element.getAttribute("placeholder"),
     element.getAttribute("name"),
     element.getAttribute("id"),
-    element.textContent
+    element.textContent,
   ]
     .filter(Boolean)
     .join(" ")
     .trim();
 
-export function isElementVisible(element: Element) {
+export const isElementVisible = (element: Element) => {
   const htmlElement = element as HTMLElement;
   const style = window.getComputedStyle(htmlElement);
   const rect = htmlElement.getBoundingClientRect();
@@ -26,10 +29,15 @@ export function isElementVisible(element: Element) {
     rect.width > 0 &&
     rect.height > 0
   );
-}
+};
 
-export function isSensitiveField(element: Element) {
-  if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) {
+export const isSensitiveField = (element: Element) => {
+  if (
+    !(
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLTextAreaElement
+    )
+  ) {
     return false;
   }
 
@@ -40,15 +48,15 @@ export function isSensitiveField(element: Element) {
     input.id,
     input.autocomplete,
     input.placeholder,
-    input.getAttribute("aria-label")
+    input.getAttribute("aria-label"),
   ]
     .filter(Boolean)
     .join(" ");
 
   return input.type === "password" || SENSITIVE_FIELD_PATTERN.test(attributes);
-}
+};
 
-export function detectRiskLevel(element: Element): ActionRiskLevel {
+export const detectRiskLevel = (element: Element): ActionRiskLevel => {
   if (isSensitiveField(element)) {
     return "high";
   }
@@ -67,14 +75,18 @@ export function detectRiskLevel(element: Element): ActionRiskLevel {
     return "medium";
   }
 
-  if (element instanceof HTMLButtonElement || element instanceof HTMLAnchorElement || element.getAttribute("role")) {
+  if (
+    element instanceof HTMLButtonElement ||
+    element instanceof HTMLAnchorElement ||
+    element.getAttribute("role")
+  ) {
     return "medium";
   }
 
   return "low";
-}
+};
 
-export function getElementLabel(element: Element) {
+export const getElementLabel = (element: Element) => {
   const labelledBy = element.getAttribute("aria-labelledby");
   const labelledText = labelledBy
     ?.split(/\s+/)
@@ -86,8 +98,14 @@ export function getElementLabel(element: Element) {
     return labelledText;
   }
 
-  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
-    const explicitLabel = element.id ? document.querySelector(`label[for="${CSS.escape(element.id)}"]`) : null;
+  if (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement ||
+    element instanceof HTMLSelectElement
+  ) {
+    const explicitLabel = element.id
+      ? document.querySelector(`label[for="${CSS.escape(element.id)}"]`)
+      : null;
     const wrappedLabel = element.closest("label");
     const label = explicitLabel?.textContent || wrappedLabel?.textContent;
 
@@ -97,5 +115,7 @@ export function getElementLabel(element: Element) {
   }
 
   const text = getElementText(element);
-  return text.replace(/\s+/g, " ").slice(0, 120) || element.tagName.toLowerCase();
-}
+  return (
+    text.replace(/\s+/g, " ").slice(0, 120) || element.tagName.toLowerCase()
+  );
+};

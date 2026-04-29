@@ -50,7 +50,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
   );
   const statusLabel = computed(() => run.value?.status ?? "idle");
 
-  function reset() {
+  const reset = () => {
     run.value = null;
     plan.value = null;
     events.value = [];
@@ -64,9 +64,9 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     activeAbortController.value?.abort();
     activeAbortController.value = null;
     loading.value = false;
-  }
+  };
 
-  async function streamLocalAssistantText(text: string) {
+  const streamLocalAssistantText = async (text: string) => {
     const messageId = createMessageId("local_stream");
     const chunks = text.match(/.{1,8}/gu) ?? [text];
 
@@ -82,16 +82,16 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     }
 
     appendTextDelta({ messages: messages.value }, messageId, "", true, "text");
-  }
+  };
 
-  function isAbortError(caught: unknown) {
+  const isAbortError = (caught: unknown) => {
     return (
       caught instanceof Error &&
       (caught.name === "AbortError" || /aborted|abort/i.test(caught.message))
     );
-  }
+  };
 
-  function markStopped() {
+  const markStopped = () => {
     finishStreamingMessages({ messages: messages.value });
     if (run.value) {
       run.value.status = "stopped";
@@ -102,9 +102,9 @@ export const useAgentRunStore = defineStore("agent-run", () => {
         status: "stopped",
       });
     }
-  }
+  };
 
-  async function applyEvent(event: AgentRunEvent) {
+  const applyEvent = async (event: AgentRunEvent) => {
     // Build a plain state snapshot for the pure helper, then write back the
     // fields it may have reassigned (run, plan, pendingAction).
     const state: AgentRunMessageState = {
@@ -129,9 +129,9 @@ export const useAgentRunStore = defineStore("agent-run", () => {
         completionText: "动作已自动完成。我会继续把执行结果保留在当前对话里。",
       });
     }
-  }
+  };
 
-  async function start(goal: string, pageContext: PageContext) {
+  const start = async (goal: string, pageContext: PageContext) => {
     if (loading.value || pendingAction.value) {
       return;
     }
@@ -203,9 +203,9 @@ export const useAgentRunStore = defineStore("agent-run", () => {
       silentStopRequested.value = false;
       loading.value = false;
     }
-  }
+  };
 
-  async function stop() {
+  const stop = async () => {
     if (!canStop.value) {
       return;
     }
@@ -225,12 +225,12 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     } catch {
       // The local abort above already stops the visible stream; the backend may have closed first.
     }
-  }
+  };
 
-  async function executeAction(
+  const executeAction = async (
     action: AgentAction,
     options?: { completionText?: string },
-  ) {
+  ) => {
     if (!run.value) {
       return;
     }
@@ -280,17 +280,17 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     } finally {
       loading.value = false;
     }
-  }
+  };
 
-  async function executePendingAction() {
+  const executePendingAction = async () => {
     if (!pendingAction.value) {
       return;
     }
 
     await executeAction(pendingAction.value);
-  }
+  };
 
-  function rejectPendingAction() {
+  const rejectPendingAction = () => {
     if (!pendingAction.value || !run.value) {
       return;
     }
@@ -307,7 +307,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     applyEvent({ type: "action_result", runId: run.value.id, result });
     applyEvent({ type: "status", runId: run.value.id, status: "completed" });
     void streamLocalAssistantText("已跳过该动作。我不会修改当前网页。");
-  }
+  };
 
   return {
     run,

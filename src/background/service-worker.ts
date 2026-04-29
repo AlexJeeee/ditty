@@ -18,15 +18,15 @@ import type {
   PageContext,
 } from "@/shared/types";
 
-async function getTargetTab(tabId?: number) {
+const getTargetTab = async (tabId?: number) => {
   if (typeof tabId === "number") {
     return chrome.tabs.get(tabId);
   }
 
   return getActiveTab();
-}
+};
 
-function getOrigin(url: string) {
+const getOrigin = (url: string) => {
   try {
     const parsed = new URL(url);
     return parsed.origin === "null"
@@ -35,9 +35,9 @@ function getOrigin(url: string) {
   } catch {
     return url;
   }
-}
+};
 
-function createFallbackPageContext(tab: chrome.tabs.Tab): PageContext {
+const createFallbackPageContext = (tab: chrome.tabs.Tab): PageContext => {
   const url = tab.url || "";
 
   return {
@@ -52,28 +52,28 @@ function createFallbackPageContext(tab: chrome.tabs.Tab): PageContext {
     interactiveElements: [],
     collectedAt: new Date().toISOString(),
   };
-}
+};
 
-function normalizeTabStatus(
+const normalizeTabStatus = (
   status: chrome.tabs.Tab["status"],
-): ActiveTabChangedMessage["payload"]["status"] {
+): ActiveTabChangedMessage["payload"]["status"] => {
   return status === "loading" || status === "complete" || status === "unloaded"
     ? status
     : undefined;
-}
+};
 
-function toExtensionError(error: unknown, fallback: string): ExtensionError {
+const toExtensionError = (error: unknown, fallback: string): ExtensionError => {
   return {
     code: "UNKNOWN_ERROR",
     message: error instanceof Error ? error.message : fallback,
     retryable: true,
   };
-}
+};
 
-async function sendToTab<T>(
+const sendToTab = async <T>(
   message: GetPageContextMessage | ExecuteActionMessage,
   tabId?: number,
-): Promise<ExtensionResponse<T>> {
+): Promise<ExtensionResponse<T>> => {
   const tab = await getTargetTab(tabId);
 
   if (!tab?.id || !tab.url || !isTabUrlAccessible(tab.url)) {
@@ -102,11 +102,11 @@ async function sendToTab<T>(
       },
     };
   }
-}
+};
 
-async function getPageContext(
+const getPageContext = async (
   message: GetPageContextMessage,
-): Promise<PageContextResponse> {
+): Promise<PageContextResponse> => {
   const tab = await getTargetTab(message.payload.tabId);
 
   if (!tab?.id || !tab.url || !isTabUrlAccessible(tab.url)) {
@@ -126,12 +126,12 @@ async function getPageContext(
   }
 
   return sendToTab<PageContext>(message, tab.id);
-}
+};
 
-async function handleSelectionAction(
+const handleSelectionAction = async (
   message: SelectionActionInvokeMessage,
   sender: chrome.runtime.MessageSender,
-): Promise<ExtensionResponse<SelectionActionPayload>> {
+): Promise<ExtensionResponse<SelectionActionPayload>> => {
   const openSidePanelPromise = openAgentSidePanel(sender);
   const storeSelectionPromise = chrome.storage.local.set({
     [PENDING_SELECTION_ACTION_STORAGE_KEY]: message.payload,
@@ -153,9 +153,9 @@ async function handleSelectionAction(
     ok: true,
     data: message.payload,
   };
-}
+};
 
-function openAgentSidePanel(sender: chrome.runtime.MessageSender) {
+const openAgentSidePanel = (sender: chrome.runtime.MessageSender) => {
   const tabId = sender.tab?.id;
   const windowId = sender.tab?.windowId;
 
@@ -168,9 +168,9 @@ function openAgentSidePanel(sender: chrome.runtime.MessageSender) {
   }
 
   return Promise.resolve();
-}
+};
 
-async function notifyActiveTabChanged(tabId: number, windowId: number) {
+const notifyActiveTabChanged = async (tabId: number, windowId: number) => {
   try {
     const tab = await chrome.tabs.get(tabId);
     const message: ActiveTabChangedMessage = {
@@ -188,7 +188,7 @@ async function notifyActiveTabChanged(tabId: number, windowId: number) {
   } catch {
     // The side panel may be closed; active tab tracking will refresh again when it opens.
   }
-}
+};
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel

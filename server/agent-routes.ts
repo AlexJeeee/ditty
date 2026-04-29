@@ -44,12 +44,12 @@ interface StreamAgentRunBody {
  * directly to `raw`. Handles tool-call accumulation, action creation, and all
  * run-status transitions. Returns when the stream is fully consumed or aborted.
  */
-async function streamOpenAICompletion(
+const streamOpenAICompletion = async (
   raw: ServerResponse,
   stored: StoredRun,
   pageContext: PageContext,
   abortController: AbortController,
-): Promise<void> {
+): Promise<void> => {
   const { run, goal } = stored;
   const model = getModel();
   const messageId = createScopedId("openai");
@@ -156,9 +156,9 @@ async function streamOpenAICompletion(
     setRunStatus(stored, "completed");
     writeSseEvent(raw, { type: "status", runId: run.id, status: "completed" });
   }
-}
+};
 
-export function registerAgentRoutes(fastify: FastifyInstance) {
+export const registerAgentRoutes = (fastify: FastifyInstance) => {
   fastify.get("/health", async () => ({
     ok: true,
     model: getModel(),
@@ -371,4 +371,4 @@ export function registerAgentRoutes(fastify: FastifyInstance) {
       };
     },
   );
-}
+};

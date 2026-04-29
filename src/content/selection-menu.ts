@@ -3,10 +3,18 @@ import { createScopedId } from "@/shared/id";
 
 const MENU_ID = "chrome-ai-agent-selection-menu";
 const MAX_SELECTION_LENGTH = 5000;
-const BUTTONS: Array<{ action: SelectionMenuAction; label: string; title: string }> = [
+const BUTTONS: Array<{
+  action: SelectionMenuAction;
+  label: string;
+  title: string;
+}> = [
   { action: "translate", label: "翻译", title: "翻译选中文本" },
   { action: "explain", label: "解释", title: "解释选中文本" },
-  { action: "add_to_chat", label: "添加到对话", title: "把选中文本加入侧边栏对话" }
+  {
+    action: "add_to_chat",
+    label: "添加到对话",
+    title: "把选中文本加入侧边栏对话",
+  },
 ];
 
 type SelectionMenuWindow = Window & {
@@ -18,7 +26,7 @@ let menu: HTMLDivElement | null = null;
 let selectedText = "";
 let hideTimer: number | undefined;
 
-function createMenu() {
+const createMenu = () => {
   if (host && menu) {
     return;
   }
@@ -96,9 +104,9 @@ function createMenu() {
 
   shadow.append(style, menu);
   document.documentElement.append(host);
-}
+};
 
-function getSelectionInfo() {
+const getSelectionInfo = () => {
   const selection = window.getSelection();
 
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
@@ -111,7 +119,9 @@ function getSelectionInfo() {
   }
 
   const range = selection.getRangeAt(0);
-  const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
+  const rects = Array.from(range.getClientRects()).filter(
+    (rect) => rect.width > 0 && rect.height > 0,
+  );
   const rect = rects[rects.length - 1] ?? range.getBoundingClientRect();
 
   if (!rect || rect.width === 0 || rect.height === 0) {
@@ -120,11 +130,11 @@ function getSelectionInfo() {
 
   return {
     text: text.slice(0, MAX_SELECTION_LENGTH),
-    rect
+    rect,
   };
-}
+};
 
-function positionMenu(rect: DOMRect) {
+const positionMenu = (rect: DOMRect) => {
   if (!menu) {
     return;
   }
@@ -133,7 +143,10 @@ function positionMenu(rect: DOMRect) {
   const menuRect = menu.getBoundingClientRect();
   const menuWidth = menuRect.width || 220;
   const menuHeight = menuRect.height || 42;
-  const left = Math.min(Math.max(rect.left + rect.width / 2 - menuWidth / 2, spacing), window.innerWidth - menuWidth - spacing);
+  const left = Math.min(
+    Math.max(rect.left + rect.width / 2 - menuWidth / 2, spacing),
+    window.innerWidth - menuWidth - spacing,
+  );
   const preferredTop = rect.bottom + spacing;
   const top =
     preferredTop + menuHeight + spacing > window.innerHeight
@@ -141,9 +154,9 @@ function positionMenu(rect: DOMRect) {
       : preferredTop;
 
   menu.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
-}
+};
 
-function showSelectionMenu() {
+const showSelectionMenu = () => {
   const info = getSelectionInfo();
 
   if (!info) {
@@ -159,9 +172,9 @@ function showSelectionMenu() {
     positionMenu(info.rect);
     menu?.setAttribute("data-open", "true");
   });
-}
+};
 
-function hideSelectionMenu() {
+const hideSelectionMenu = () => {
   selectedText = "";
   window.clearTimeout(hideTimer);
 
@@ -171,9 +184,9 @@ function hideSelectionMenu() {
 
   menu.removeAttribute("data-open");
   menu.style.transform = "translate(-9999px, -9999px)";
-}
+};
 
-async function invokeSelectionAction(action: SelectionMenuAction) {
+const invokeSelectionAction = async (action: SelectionMenuAction) => {
   const text = selectedText || getSelectionInfo()?.text;
 
   if (!text) {
@@ -191,17 +204,17 @@ async function invokeSelectionAction(action: SelectionMenuAction) {
       selectedText: text,
       pageTitle: document.title,
       pageUrl: window.location.href,
-      requestedAt: new Date().toISOString()
-    }
+      requestedAt: new Date().toISOString(),
+    },
   });
-}
+};
 
-function scheduleSelectionCheck() {
+const scheduleSelectionCheck = () => {
   window.clearTimeout(hideTimer);
   hideTimer = window.setTimeout(showSelectionMenu, 80);
-}
+};
 
-export function setupSelectionMenu() {
+export const setupSelectionMenu = () => {
   const currentWindow = window as SelectionMenuWindow;
   if (currentWindow.__chromeAiAgentSelectionMenuSetup) {
     return;
@@ -212,10 +225,15 @@ export function setupSelectionMenu() {
   document.addEventListener("selectionchange", scheduleSelectionCheck);
   document.addEventListener("mouseup", scheduleSelectionCheck);
   document.addEventListener("keyup", (event) => {
-    if (event.key.startsWith("Arrow") || event.key === "Shift" || event.key === "Control" || event.key === "Meta") {
+    if (
+      event.key.startsWith("Arrow") ||
+      event.key === "Shift" ||
+      event.key === "Control" ||
+      event.key === "Meta"
+    ) {
       scheduleSelectionCheck();
     }
   });
   window.addEventListener("scroll", hideSelectionMenu, true);
   window.addEventListener("resize", hideSelectionMenu);
-}
+};

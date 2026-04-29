@@ -17,23 +17,23 @@ type PageActionDispatcher = (
   message: ExecuteActionMessage,
 ) => Promise<ActionExecutionResponse>;
 
-function createActionResult(
+const createActionResult = (
   action: AgentAction,
   status: AgentActionResult["status"],
   message: string,
   output?: unknown,
-): AgentActionResult {
+): AgentActionResult => {
   return {
     actionId: action.id,
     status,
     message,
     output,
   };
-}
+};
 
-async function executeOpenUrlAction(
+const executeOpenUrlAction = async (
   action: AgentAction,
-): Promise<ActionExecutionResponse> {
+): Promise<ActionExecutionResponse> => {
   const rawUrl =
     action.input?.url ??
     action.input?.value ??
@@ -77,7 +77,7 @@ async function executeOpenUrlAction(
       },
     ),
   };
-}
+};
 
 const BROWSER_ACTION_EXECUTORS: Partial<
   Record<AgentToolName, BrowserActionExecutor>
@@ -85,10 +85,10 @@ const BROWSER_ACTION_EXECUTORS: Partial<
   open_url: executeOpenUrlAction,
 };
 
-export async function executeAgentAction(
+export const executeAgentAction = async (
   message: ExecuteActionMessage,
   dispatchPageAction: PageActionDispatcher,
-): Promise<ActionExecutionResponse> {
+): Promise<ActionExecutionResponse> => {
   const action = message.payload.action;
 
   if (action.riskLevel === "high") {
@@ -106,4 +106,4 @@ export async function executeAgentAction(
   return browserExecutor
     ? browserExecutor(action)
     : dispatchPageAction(message);
-}
+};

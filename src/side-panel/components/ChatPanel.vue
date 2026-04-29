@@ -16,7 +16,7 @@ const emit = defineEmits<{
 const agentRun = useAgentRunStore();
 const logRef = ref<HTMLElement | null>(null);
 
-function submit() {
+const submit = () => {
   const value = props.modelValue.trim();
   if (!value || !agentRun.canSend) {
     return;
@@ -24,9 +24,9 @@ function submit() {
 
   emit("submit", value);
   emit("update:modelValue", "");
-}
+};
 
-function scrollToBottom() {
+const scrollToBottom = () => {
   nextTick(() => {
     if (!logRef.value) {
       return;
@@ -34,18 +34,21 @@ function scrollToBottom() {
 
     logRef.value.scrollTo({
       top: logRef.value.scrollHeight,
-      behavior: "smooth"
+      behavior: "smooth",
     });
   });
-}
+};
 
 watch(
   () =>
     agentRun.messages
-      .map((message) => `${message.id}:${message.content.length}:${message.streaming}:${message.actionStatus ?? ""}`)
+      .map(
+        (message) =>
+          `${message.id}:${message.content.length}:${message.streaming}:${message.actionStatus ?? ""}`,
+      )
       .join("|"),
   scrollToBottom,
-  { flush: "post" }
+  { flush: "post" },
 );
 
 onMounted(() => {
@@ -60,7 +63,13 @@ onMounted(() => {
         <p class="eyebrow">Chat</p>
         <h2>{{ agentRun.statusLabel }}</h2>
       </div>
-      <button class="icon-button" type="button" title="清空对话" :disabled="!agentRun.messages.length" @click="agentRun.reset">
+      <button
+        class="icon-button"
+        type="button"
+        title="清空对话"
+        :disabled="!agentRun.messages.length"
+        @click="agentRun.reset"
+      >
         清空
       </button>
     </div>

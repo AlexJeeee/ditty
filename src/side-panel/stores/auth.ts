@@ -8,21 +8,21 @@ export const useAuthStore = defineStore("auth", () => {
 
   const authenticated = computed(() => Boolean(email.value));
 
-  function signInDemo() {
+  const signInDemo = () => {
     email.value = MOCK_USER_EMAIL;
     quotaRemaining.value = 100;
-  }
+  };
 
-  function signOut() {
+  const signOut = () => {
     email.value = "";
     quotaRemaining.value = 0;
-  }
+  };
 
   return {
     authenticated,
     email,
     quotaRemaining,
     signInDemo,
-    signOut
+    signOut,
   };
 });

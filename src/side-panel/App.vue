@@ -10,7 +10,7 @@ import {
   PENDING_SELECTION_ACTION_STORAGE_KEY,
   type ExtensionMessage,
   type SelectionActionPayload,
-  type SelectionMenuAction
+  type SelectionMenuAction,
 } from "@/shared/extension-messages";
 
 const auth = useAuthStore();
@@ -31,7 +31,10 @@ onBeforeUnmount(() => {
   chrome.storage.onChanged.removeListener(handleStorageChange);
 });
 
-async function start(goal: string, selectionPayload?: SelectionActionPayload) {
+const start = async (
+  goal: string,
+  selectionPayload?: SelectionActionPayload,
+) => {
   await pageContext.refresh();
 
   if (selectionPayload) {
@@ -41,21 +44,21 @@ async function start(goal: string, selectionPayload?: SelectionActionPayload) {
   if (pageContext.context) {
     await agentRun.start(goal, pageContext.context);
   }
-}
+};
 
-function createSelectionGoal(payload: SelectionActionPayload) {
+const createSelectionGoal = (payload: SelectionActionPayload) => {
   const text = payload.selectedText.trim();
   const source = payload.pageTitle || payload.pageUrl;
   const prompts: Record<SelectionMenuAction, string> = {
     translate: `请将以下网页选中文本翻译成自然、准确的中文，并保留关键信息。\n\n来源：${source}\n\n${text}`,
     explain: `请解释以下网页选中文本的含义，提炼重点，并在必要时补充背景。\n\n来源：${source}\n\n${text}`,
-    add_to_chat: `请基于以下网页选中文本继续对话。\n\n来源：${source}\n\n${text}`
+    add_to_chat: `请基于以下网页选中文本继续对话。\n\n来源：${source}\n\n${text}`,
   };
 
   return prompts[payload.action];
-}
+};
 
-async function handleSelectionAction(payload: SelectionActionPayload) {
+const handleSelectionAction = async (payload: SelectionActionPayload) => {
   if (!payload.id || payload.id === handledSelectionActionId.value) {
     return;
   }
@@ -75,18 +78,25 @@ async function handleSelectionAction(payload: SelectionActionPayload) {
 
   await nextTick();
   await start(goal, payload);
-}
+};
 
-async function consumePendingSelectionAction() {
-  const result = await chrome.storage.local.get(PENDING_SELECTION_ACTION_STORAGE_KEY);
-  const payload = result[PENDING_SELECTION_ACTION_STORAGE_KEY] as SelectionActionPayload | undefined;
+const consumePendingSelectionAction = async () => {
+  const result = await chrome.storage.local.get(
+    PENDING_SELECTION_ACTION_STORAGE_KEY,
+  );
+  const payload = result[PENDING_SELECTION_ACTION_STORAGE_KEY] as
+    | SelectionActionPayload
+    | undefined;
 
   if (payload) {
     await handleSelectionAction(payload);
   }
-}
+};
 
-function handleStorageChange(changes: Record<string, chrome.storage.StorageChange>, areaName: string) {
+const handleStorageChange = (
+  changes: Record<string, chrome.storage.StorageChange>,
+  areaName: string,
+) => {
   if (areaName !== "local") {
     return;
   }
@@ -97,22 +107,26 @@ function handleStorageChange(changes: Record<string, chrome.storage.StorageChang
   if (payload) {
     void handleSelectionAction(payload);
   }
-}
+};
 
-function handleRuntimeMessage(message: ExtensionMessage) {
+const handleRuntimeMessage = (message: ExtensionMessage) => {
   if (message.type !== "active_tab:changed") {
     return false;
   }
 
   void pageContext.refresh({ tabId: message.payload.tabId });
   return false;
-}
+};
 </script>
 
 <template>
   <main class="app-shell">
     <LoginPanel />
     <PageContextBar />
-    <ChatPanel v-if="auth.authenticated" v-model="composerGoal" @submit="start" />
+    <ChatPanel
+      v-if="auth.authenticated"
+      v-model="composerGoal"
+      @submit="start"
+    />
   </main>
 </template>

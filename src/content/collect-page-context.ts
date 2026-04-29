@@ -16,7 +16,7 @@ const MAX_TEXT_LENGTH = 5000;
 const MAX_ELEMENTS = 80;
 const MAX_TABLES = 5;
 
-function collectVisibleText() {
+const collectVisibleText = () => {
   const walker = document.createTreeWalker(
     document.body,
     NodeFilter.SHOW_TEXT,
@@ -57,9 +57,9 @@ function collectVisibleText() {
   }
 
   return parts.join(" ").slice(0, MAX_TEXT_LENGTH);
-}
+};
 
-function collectHeadings(): PageHeading[] {
+const collectHeadings = (): PageHeading[] => {
   return Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6"))
     .filter(isElementVisible)
     .slice(0, 30)
@@ -69,9 +69,9 @@ function collectHeadings(): PageHeading[] {
         heading.textContent?.replace(/\s+/g, " ").trim().slice(0, 160) || "",
     }))
     .filter((heading) => heading.text.length > 0);
-}
+};
 
-function collectTables(): PageTableSummary[] {
+const collectTables = (): PageTableSummary[] => {
   return Array.from(document.querySelectorAll("table"))
     .filter(isElementVisible)
     .slice(0, MAX_TABLES)
@@ -98,9 +98,9 @@ function collectTables(): PageTableSummary[] {
         preview,
       };
     });
-}
+};
 
-function getRole(element: Element) {
+const getRole = (element: Element) => {
   const ariaRole = element.getAttribute("role");
   if (ariaRole) {
     return ariaRole;
@@ -114,9 +114,9 @@ function getRole(element: Element) {
   if (element.getAttribute("contenteditable") === "true") return "textbox";
 
   return element.tagName.toLowerCase();
-}
+};
 
-function collectInteractiveElements(): InteractiveElement[] {
+const collectInteractiveElements = (): InteractiveElement[] => {
   const selector = [
     "a[href]",
     "button",
@@ -165,9 +165,9 @@ function collectInteractiveElements(): InteractiveElement[] {
         ),
       };
     });
-}
+};
 
-export function collectPageContext(): PageContext {
+export const collectPageContext = (): PageContext => {
   clearElementRegistry();
 
   return {
@@ -181,4 +181,4 @@ export function collectPageContext(): PageContext {
     interactiveElements: collectInteractiveElements(),
     collectedAt: new Date().toISOString(),
   };
-}
+};

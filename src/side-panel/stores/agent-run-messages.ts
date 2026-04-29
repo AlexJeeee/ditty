@@ -1,9 +1,25 @@
 import { createScopedId } from "@/shared/id";
-import type { AgentAction, AgentActionResult, AgentPlan, AgentRun, AgentRunEvent } from "@/shared/types";
+import type {
+  AgentAction,
+  AgentActionResult,
+  AgentPlan,
+  AgentRun,
+  AgentRunEvent,
+} from "@/shared/types";
 
 export type ChatRole = "user" | "assistant" | "system";
-export type ChatMessageKind = "text" | "thinking" | "plan" | "action_confirmation" | "result" | "error";
-export type ActionMessageStatus = "pending" | "executing" | "confirmed" | "rejected";
+export type ChatMessageKind =
+  | "text"
+  | "thinking"
+  | "plan"
+  | "action_confirmation"
+  | "result"
+  | "error";
+export type ActionMessageStatus =
+  | "pending"
+  | "executing"
+  | "confirmed"
+  | "rejected";
 
 export interface ChatMessage {
   id: string;
@@ -34,48 +50,59 @@ export interface AppliedAgentRunEvent {
 
 export const createMessageId = (prefix: string) => createScopedId(prefix, 6);
 
-export function createWelcomeMessage(): ChatMessage {
+export const createWelcomeMessage = (): ChatMessage => {
   return {
     id: "welcome",
     role: "assistant",
     kind: "text",
-    content: "你好，我可以读取当前网页、解释选中文本，并在需要操作页面时先把动作发到这里让你确认。",
-    createdAt: new Date().toISOString()
+    content:
+      "你好，我可以读取当前网页、解释选中文本，并在需要操作页面时先把动作发到这里让你确认。",
+    createdAt: new Date().toISOString(),
   };
-}
+};
 
-export function createChatMessage(message: Omit<ChatMessage, "id" | "createdAt"> & { id?: string }): ChatMessage {
+export const createChatMessage = (
+  message: Omit<ChatMessage, "id" | "createdAt"> & { id?: string },
+): ChatMessage => {
   return {
     ...message,
     id: message.id ?? createMessageId(message.kind),
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   };
-}
+};
 
-export function formatPlan(planValue: AgentPlan) {
-  const steps = planValue.steps.map((step, index) => `${index + 1}. ${step.toolName}：${step.reason}`).join("\n");
+export const formatPlan = (planValue: AgentPlan) => {
+  const steps = planValue.steps
+    .map((step, index) => `${index + 1}. ${step.toolName}：${step.reason}`)
+    .join("\n");
   const blocked = planValue.blockedActions.length
     ? `\n\n已阻断的高风险动作：\n${planValue.blockedActions
-        .map((action) => `- ${action.target?.description ?? action.toolName}：${action.reason}`)
+        .map(
+          (action) =>
+            `- ${action.target?.description ?? action.toolName}：${action.reason}`,
+        )
         .join("\n")}`
     : "";
 
   return `${planValue.summary}\n\n计划：\n${steps}${blocked}`;
-}
+};
 
-export function pushMessage(state: Pick<AgentRunMessageState, "messages">, message: Omit<ChatMessage, "id" | "createdAt"> & { id?: string }) {
+export const pushMessage = (
+  state: Pick<AgentRunMessageState, "messages">,
+  message: Omit<ChatMessage, "id" | "createdAt"> & { id?: string },
+) => {
   const chatMessage = createChatMessage(message);
   state.messages.push(chatMessage);
   return chatMessage;
-}
+};
 
-export function appendTextDelta(
+export const appendTextDelta = (
   state: Pick<AgentRunMessageState, "messages">,
   messageId: string,
   text: string,
   done = false,
-  kind: ChatMessageKind = "thinking"
-) {
+  kind: ChatMessageKind = "thinking",
+) => {
   let message = state.messages.find((item) => item.id === messageId);
 
   if (!message) {
@@ -84,28 +111,30 @@ export function appendTextDelta(
       role: "assistant",
       kind,
       content: "",
-      streaming: true
+      streaming: true,
     });
   }
 
   message.content += text;
   message.streaming = !done;
-}
+};
 
-export function finishStreamingMessages(state: Pick<AgentRunMessageState, "messages">) {
+export const finishStreamingMessages = (
+  state: Pick<AgentRunMessageState, "messages">,
+) => {
   for (const message of state.messages) {
     if (message.streaming) {
       message.streaming = false;
     }
   }
-}
+};
 
-export function updateActionMessage(
+export const updateActionMessage = (
   state: Pick<AgentRunMessageState, "messages">,
   actionId: string,
   status: ActionMessageStatus,
-  content?: string
-) {
+  content?: string,
+) => {
   const message = state.messages.find((item) => item.action?.id === actionId);
 
   if (!message) {
@@ -116,9 +145,12 @@ export function updateActionMessage(
   if (content) {
     message.content = content;
   }
-}
+};
 
-export function applyAgentRunEvent(state: AgentRunMessageState, event: AgentRunEvent): AppliedAgentRunEvent {
+export const applyAgentRunEvent = (
+  state: AgentRunMessageState,
+  event: AgentRunEvent,
+): AppliedAgentRunEvent => {
   state.events.push(event);
 
   if (event.type === "status" && state.run) {
@@ -130,12 +162,18 @@ export function applyAgentRunEvent(state: AgentRunMessageState, event: AgentRunE
     pushMessage(state, {
       role: "assistant",
       kind: "text",
-      content: event.text
+      content: event.text,
     });
   }
 
   if (event.type === "message_delta") {
-    appendTextDelta(state, event.messageId, event.text, event.done, event.channel === "answer" ? "text" : "thinking");
+    appendTextDelta(
+      state,
+      event.messageId,
+      event.text,
+      event.done,
+      event.channel === "answer" ? "text" : "thinking",
+    );
   }
 
   if (event.type === "plan") {
@@ -147,7 +185,7 @@ export function applyAgentRunEvent(state: AgentRunMessageState, event: AgentRunE
       role: "assistant",
       kind: "plan",
       content: formatPlan(event.plan),
-      plan: event.plan
+      plan: event.plan,
     });
   }
 
@@ -158,7 +196,7 @@ export function applyAgentRunEvent(state: AgentRunMessageState, event: AgentRunE
       kind: "action_confirmation",
       content: event.action.reason,
       action: event.action,
-      actionStatus: event.action.requiresConfirmation ? "pending" : "executing"
+      actionStatus: event.action.requiresConfirmation ? "pending" : "executing",
     });
 
     if (event.action.requiresConfirmation) {
@@ -174,7 +212,7 @@ export function applyAgentRunEvent(state: AgentRunMessageState, event: AgentRunE
       role: "assistant",
       kind: "result",
       content: `${event.result.status}：${event.result.message}`,
-      result: event.result
+      result: event.result,
     });
   }
 
@@ -182,10 +220,10 @@ export function applyAgentRunEvent(state: AgentRunMessageState, event: AgentRunE
     pushMessage(state, {
       role: "assistant",
       kind: "error",
-      content: event.error.message
+      content: event.error.message,
     });
     return { error: event };
   }
 
   return {};
-}
+};
