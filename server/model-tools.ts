@@ -224,6 +224,7 @@ export const createActionFromToolCall = (
         action: {
           ...result.action,
           id: actionId,
+          toolCallId: toolCall.id || actionId,
         },
       }
     : {

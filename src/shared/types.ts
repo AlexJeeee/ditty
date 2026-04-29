@@ -79,6 +79,7 @@ export interface PageContext {
 export interface AgentAction {
   id: string;
   toolName: AgentToolName;
+  toolCallId?: string;
   riskLevel: ActionRiskLevel;
   requiresConfirmation: boolean;
   target?: {
@@ -118,13 +119,50 @@ export interface AgentActionResult {
   error?: ExtensionError;
 }
 
+export interface ModelToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+export type ModelConversationMessage =
+  | {
+      role: "user";
+      content: string;
+    }
+  | {
+      role: "assistant";
+      content: string | null;
+      tool_calls?: ModelToolCall[];
+    }
+  | {
+      role: "tool";
+      tool_call_id: string;
+      content: string;
+    };
+
 export type AgentRunEvent =
   | { type: "status"; runId: string; status: AgentRunStatus }
   | { type: "message"; runId: string; text: string }
-  | { type: "message_delta"; runId: string; messageId: string; text: string; done?: boolean; channel?: "thinking" | "answer" }
+  | {
+      type: "message_delta";
+      runId: string;
+      messageId: string;
+      text: string;
+      done?: boolean;
+      channel?: "thinking" | "answer";
+    }
   | { type: "plan"; runId: string; plan: AgentPlan }
   | { type: "action_request"; runId: string; action: AgentAction }
   | { type: "action_result"; runId: string; result: AgentActionResult }
+  | {
+      type: "conversation_message";
+      runId: string;
+      message: ModelConversationMessage;
+    }
   | { type: "error"; runId: string; error: ExtensionError };
 
 export interface ExtensionError {

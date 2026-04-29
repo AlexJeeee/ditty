@@ -1,4 +1,9 @@
-import type { AgentRun, AgentRunEvent, PageContext } from "./types";
+import type {
+  AgentRun,
+  AgentRunEvent,
+  ModelConversationMessage,
+  PageContext,
+} from "./types";
 
 interface ApiErrorBody {
   error?: {
@@ -101,6 +106,7 @@ interface StopAgentRunResponse {
 export const createAgentRun = async (
   goal: string,
   pageContext: PageContext,
+  conversation: ModelConversationMessage[],
   options?: AgentRequestOptions,
 ): Promise<AgentRun> => {
   try {
@@ -112,6 +118,7 @@ export const createAgentRun = async (
       body: JSON.stringify({
         goal,
         pageContext,
+        conversation,
       }),
       signal: options?.signal,
     });

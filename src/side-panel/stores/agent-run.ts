@@ -13,6 +13,7 @@ import type {
   AgentRun,
   AgentRunEvent,
   ExtensionError,
+  ModelConversationMessage,
   PageContext,
 } from "@/shared/types";
 import {
@@ -36,6 +37,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
   const pendingAction = ref<AgentAction | null>(null);
   const results = ref<AgentActionResult[]>([]);
   const messages = ref([createWelcomeMessage()]);
+  const modelConversation = ref<ModelConversationMessage[]>([]);
   const loading = ref(false);
   const stopping = ref(false);
   const stopRequested = ref(false);
@@ -57,6 +59,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     pendingAction.value = null;
     results.value = [];
     messages.value = [];
+    modelConversation.value = [];
     error.value = null;
     stopping.value = false;
     stopRequested.value = false;
@@ -105,6 +108,10 @@ export const useAgentRunStore = defineStore("agent-run", () => {
   };
 
   const applyEvent = async (event: AgentRunEvent) => {
+    if (event.type === "conversation_message") {
+      modelConversation.value.push(event.message);
+    }
+
     // Build a plain state snapshot for the pure helper, then write back the
     // fields it may have reassigned (run, plan, pendingAction).
     const state: AgentRunMessageState = {
@@ -157,9 +164,14 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     );
 
     try {
-      run.value = await createAgentRun(goal, pageContext, {
-        signal: abortController.signal,
-      });
+      run.value = await createAgentRun(
+        goal,
+        pageContext,
+        modelConversation.value,
+        {
+          signal: abortController.signal,
+        },
+      );
 
       for await (const event of streamAgentRun(run.value, pageContext, {
         signal: abortController.signal,
@@ -256,6 +268,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
             message: response.error.message,
             error: response.error,
           };
+      appendToolConversationMessage(action, result);
 
       if (pendingAction.value?.id === action.id) {
         pendingAction.value = null;
@@ -303,10 +316,31 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     };
 
     updateActionMessage({ messages: messages.value }, action.id, "rejected");
+    appendToolConversationMessage(action, result);
     pendingAction.value = null;
     applyEvent({ type: "action_result", runId: run.value.id, result });
     applyEvent({ type: "status", runId: run.value.id, status: "completed" });
     void streamLocalAssistantText("已跳过该动作。我不会修改当前网页。");
+  };
+
+  const appendToolConversationMessage = (
+    action: AgentAction,
+    result: AgentActionResult,
+  ) => {
+    if (!action.toolCallId) {
+      return;
+    }
+
+    modelConversation.value.push({
+      role: "tool",
+      tool_call_id: action.toolCallId,
+      content: JSON.stringify({
+        status: result.status,
+        message: result.message,
+        output: result.output ?? null,
+        error: result.error?.message ?? null,
+      }),
+    });
   };
 
   return {
@@ -316,6 +350,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     pendingAction,
     results,
     messages,
+    modelConversation,
     loading,
     stopping,
     error,

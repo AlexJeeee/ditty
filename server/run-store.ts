@@ -1,4 +1,8 @@
-import type { AgentRun, PageContext } from "../src/shared/types";
+import type {
+  AgentRun,
+  ModelConversationMessage,
+  PageContext,
+} from "../src/shared/types";
 
 const MAX_VISIBLE_TEXT_LENGTH = 6000;
 const MAX_SELECTED_TEXT_LENGTH = 4000;
@@ -8,6 +12,8 @@ export interface StoredRun {
   run: AgentRun;
   goal: string;
   pageContext: PageContext;
+  conversation: ModelConversationMessage[];
+  currentUserMessage: ModelConversationMessage & { role: "user" };
 }
 
 export interface ActiveStream {
