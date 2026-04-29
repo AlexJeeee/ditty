@@ -155,4 +155,3 @@ git diff --check
 - [产品需求](docs/product-requirements.md)
 - [技术方案](docs/technical-design.md)
 - [开发模式与热更新](docs/development.md)
-  test
