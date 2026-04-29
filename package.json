@@ -10,10 +10,15 @@
     "dev:all": "concurrently -n extension,server -c blue,green \"pnpm dev\" \"pnpm server:dev\"",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
+    "format": "prettier --write .",
+    "prepare": "husky",
     "typecheck": "vue-tsc --noEmit",
     "server:typecheck": "tsc --noEmit -p server/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest"
+  },
+  "lint-staged": {
+    "*.{js,cjs,mjs,ts,tsx,vue,json,css,scss,html,md}": "prettier --write"
   },
   "dependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.32",
@@ -31,6 +36,9 @@
     "@types/node": "^22.10.2",
     "@vitejs/plugin-vue": "^5.2.1",
     "concurrently": "^9.2.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.3",
     "tsx": "^4.21.0",
     "typescript": "^5.7.2",
     "vite": "^5.4.11",

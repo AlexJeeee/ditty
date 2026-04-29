@@ -1,8 +1,20 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import { createAgentRun, stopAgentRun, streamAgentRun } from "@/shared/api-client";
+import {
+  createAgentRun,
+  stopAgentRun,
+  streamAgentRun,
+} from "@/shared/api-client";
 import type { ActionExecutionResponse } from "@/shared/extension-messages";
-import type { AgentAction, AgentActionResult, AgentPlan, AgentRun, AgentRunEvent, ExtensionError, PageContext } from "@/shared/types";
+import type {
+  AgentAction,
+  AgentActionResult,
+  AgentPlan,
+  AgentRun,
+  AgentRunEvent,
+  ExtensionError,
+  PageContext,
+} from "@/shared/types";
 import {
   appendTextDelta,
   applyAgentRunEvent,
@@ -11,10 +23,11 @@ import {
   finishStreamingMessages,
   pushMessage,
   updateActionMessage,
-  type AgentRunMessageState
+  type AgentRunMessageState,
 } from "./agent-run-messages";
 
-const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const delay = (ms: number) =>
+  new Promise((resolve) => window.setTimeout(resolve, ms));
 
 export const useAgentRunStore = defineStore("agent-run", () => {
   const run = ref<AgentRun | null>(null);
@@ -32,7 +45,9 @@ export const useAgentRunStore = defineStore("agent-run", () => {
 
   const hasRun = computed(() => Boolean(run.value));
   const canSend = computed(() => !loading.value && !pendingAction.value);
-  const canStop = computed(() => Boolean(activeAbortController.value) && loading.value);
+  const canStop = computed(
+    () => Boolean(activeAbortController.value) && loading.value,
+  );
   const statusLabel = computed(() => run.value?.status ?? "idle");
 
   function getMessageState(): AgentRunMessageState {
@@ -42,7 +57,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
       events: events.value,
       pendingAction: pendingAction.value,
       results: results.value,
-      messages: messages.value
+      messages: messages.value,
     };
   }
 
@@ -73,7 +88,13 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     const chunks = text.match(/.{1,8}/gu) ?? [text];
 
     for (const chunk of chunks) {
-      appendTextDelta({ messages: messages.value }, messageId, chunk, false, "text");
+      appendTextDelta(
+        { messages: messages.value },
+        messageId,
+        chunk,
+        false,
+        "text",
+      );
       await delay(35);
     }
 
@@ -81,7 +102,10 @@ export const useAgentRunStore = defineStore("agent-run", () => {
   }
 
   function isAbortError(caught: unknown) {
-    return caught instanceof Error && (caught.name === "AbortError" || /aborted|abort/i.test(caught.message));
+    return (
+      caught instanceof Error &&
+      (caught.name === "AbortError" || /aborted|abort/i.test(caught.message))
+    );
   }
 
   function markStopped() {
@@ -89,7 +113,11 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     if (run.value) {
       run.value.status = "stopped";
       run.value.updatedAt = new Date().toISOString();
-      events.value.push({ type: "status", runId: run.value.id, status: "stopped" });
+      events.value.push({
+        type: "status",
+        runId: run.value.id,
+        status: "stopped",
+      });
     }
   }
 
@@ -104,7 +132,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
 
     if (result.autoAction) {
       await executeAction(result.autoAction, {
-        completionText: "动作已自动完成。我会继续把执行结果保留在当前对话里。"
+        completionText: "动作已自动完成。我会继续把执行结果保留在当前对话里。",
       });
     }
   }
@@ -125,19 +153,22 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     pendingAction.value = null;
     results.value = [];
     events.value = [];
-    pushMessage({ messages: messages.value }, {
-      role: "user",
-      kind: "text",
-      content: goal
-    });
+    pushMessage(
+      { messages: messages.value },
+      {
+        role: "user",
+        kind: "text",
+        content: goal,
+      },
+    );
 
     try {
       run.value = await createAgentRun(goal, pageContext, {
-        signal: abortController.signal
+        signal: abortController.signal,
       });
 
       for await (const event of streamAgentRun(run.value, pageContext, {
-        signal: abortController.signal
+        signal: abortController.signal,
       })) {
         await applyEvent(event);
       }
@@ -145,11 +176,14 @@ export const useAgentRunStore = defineStore("agent-run", () => {
       if (stopRequested.value || isAbortError(caught)) {
         if (!silentStopRequested.value) {
           markStopped();
-          pushMessage({ messages: messages.value }, {
-            role: "assistant",
-            kind: "text",
-            content: "已终止当前回答。"
-          });
+          pushMessage(
+            { messages: messages.value },
+            {
+              role: "assistant",
+              kind: "text",
+              content: "已终止当前回答。",
+            },
+          );
         }
         return;
       }
@@ -157,13 +191,16 @@ export const useAgentRunStore = defineStore("agent-run", () => {
       error.value = {
         code: "UNKNOWN_ERROR",
         message: caught instanceof Error ? caught.message : "Agent 运行失败。",
-        retryable: true
+        retryable: true,
       };
-      pushMessage({ messages: messages.value }, {
-        role: "assistant",
-        kind: "error",
-        content: error.value.message
-      });
+      pushMessage(
+        { messages: messages.value },
+        {
+          role: "assistant",
+          kind: "error",
+          content: error.value.message,
+        },
+      );
     } finally {
       if (activeAbortController.value === abortController) {
         activeAbortController.value = null;
@@ -196,7 +233,10 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     }
   }
 
-  async function executeAction(action: AgentAction, options?: { completionText?: string }) {
+  async function executeAction(
+    action: AgentAction,
+    options?: { completionText?: string },
+  ) {
     if (!run.value) {
       return;
     }
@@ -210,8 +250,8 @@ export const useAgentRunStore = defineStore("agent-run", () => {
         type: "agent_action:execute",
         payload: {
           runId: run.value.id,
-          action
-        }
+          action,
+        },
       })) as ActionExecutionResponse;
 
       const result: AgentActionResult = response.ok
@@ -220,23 +260,28 @@ export const useAgentRunStore = defineStore("agent-run", () => {
             actionId: action.id,
             status: "failed",
             message: response.error.message,
-            error: response.error
+            error: response.error,
           };
 
       if (pendingAction.value?.id === action.id) {
         pendingAction.value = null;
       }
-      updateActionMessage({ messages: messages.value }, action.id, result.status === "succeeded" ? "confirmed" : "rejected");
+      updateActionMessage(
+        { messages: messages.value },
+        action.id,
+        result.status === "succeeded" ? "confirmed" : "rejected",
+      );
       applyEvent({ type: "action_result", runId: run.value.id, result });
       applyEvent({
         type: "status",
         runId: run.value.id,
-        status: result.status === "succeeded" ? "completed" : "failed"
+        status: result.status === "succeeded" ? "completed" : "failed",
       });
       await streamLocalAssistantText(
         result.status === "succeeded"
-          ? options?.completionText ?? "动作已完成。我会继续把执行结果保留在当前对话里。"
-          : "动作没有成功执行，原因已经显示在上方。"
+          ? (options?.completionText ??
+              "动作已完成。我会继续把执行结果保留在当前对话里。")
+          : "动作没有成功执行，原因已经显示在上方。",
       );
     } finally {
       loading.value = false;
@@ -260,7 +305,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     const result: AgentActionResult = {
       actionId: action.id,
       status: "skipped",
-      message: "用户跳过了该动作。"
+      message: "用户跳过了该动作。",
     };
 
     updateActionMessage({ messages: messages.value }, action.id, "rejected");
@@ -288,6 +333,6 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     stop,
     executePendingAction,
     rejectPendingAction,
-    reset
+    reset,
   };
 });
