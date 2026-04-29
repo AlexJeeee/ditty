@@ -50,23 +50,6 @@ export const useAgentRunStore = defineStore("agent-run", () => {
   );
   const statusLabel = computed(() => run.value?.status ?? "idle");
 
-  function getMessageState(): AgentRunMessageState {
-    return {
-      run: run.value,
-      plan: plan.value,
-      events: events.value,
-      pendingAction: pendingAction.value,
-      results: results.value,
-      messages: messages.value,
-    };
-  }
-
-  function commitMessageState(state: AgentRunMessageState) {
-    run.value = state.run;
-    plan.value = state.plan;
-    pendingAction.value = state.pendingAction;
-  }
-
   function reset() {
     run.value = null;
     plan.value = null;
@@ -122,9 +105,20 @@ export const useAgentRunStore = defineStore("agent-run", () => {
   }
 
   async function applyEvent(event: AgentRunEvent) {
-    const state = getMessageState();
+    // Build a plain state snapshot for the pure helper, then write back the
+    // fields it may have reassigned (run, plan, pendingAction).
+    const state: AgentRunMessageState = {
+      run: run.value,
+      plan: plan.value,
+      events: events.value,
+      pendingAction: pendingAction.value,
+      results: results.value,
+      messages: messages.value,
+    };
     const result = applyAgentRunEvent(state, event);
-    commitMessageState(state);
+    run.value = state.run;
+    plan.value = state.plan;
+    pendingAction.value = state.pendingAction;
 
     if (result.error) {
       error.value = result.error.error;

@@ -1,33 +1,47 @@
 import { clearElementRegistry, registerElement } from "./element-registry";
-import { detectRiskLevel, getElementLabel, isElementVisible, isSensitiveField } from "./risk-detector";
-import type { InteractiveElement, PageContext, PageHeading, PageTableSummary } from "@/shared/types";
+import {
+  detectRiskLevel,
+  getElementLabel,
+  isElementVisible,
+  isSensitiveField,
+} from "./risk-detector";
+import type {
+  InteractiveElement,
+  PageContext,
+  PageHeading,
+  PageTableSummary,
+} from "@/shared/types";
 
 const MAX_TEXT_LENGTH = 5000;
 const MAX_ELEMENTS = 80;
 const MAX_TABLES = 5;
 
 function collectVisibleText() {
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      const parent = node.parentElement;
-      const text = node.textContent?.replace(/\s+/g, " ").trim();
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        const parent = node.parentElement;
+        const text = node.textContent?.replace(/\s+/g, " ").trim();
 
-      if (!parent || !text) {
-        return NodeFilter.FILTER_REJECT;
-      }
+        if (!parent || !text) {
+          return NodeFilter.FILTER_REJECT;
+        }
 
-      const tagName = parent.tagName.toLowerCase();
-      if (["script", "style", "noscript", "template"].includes(tagName)) {
-        return NodeFilter.FILTER_REJECT;
-      }
+        const tagName = parent.tagName.toLowerCase();
+        if (["script", "style", "noscript", "template"].includes(tagName)) {
+          return NodeFilter.FILTER_REJECT;
+        }
 
-      if (!isElementVisible(parent)) {
-        return NodeFilter.FILTER_REJECT;
-      }
+        if (!isElementVisible(parent)) {
+          return NodeFilter.FILTER_REJECT;
+        }
 
-      return NodeFilter.FILTER_ACCEPT;
-    }
-  });
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    },
+  );
 
   const parts: string[] = [];
   let length = 0;
@@ -51,7 +65,8 @@ function collectHeadings(): PageHeading[] {
     .slice(0, 30)
     .map((heading) => ({
       level: Number(heading.tagName.slice(1)),
-      text: heading.textContent?.replace(/\s+/g, " ").trim().slice(0, 160) || ""
+      text:
+        heading.textContent?.replace(/\s+/g, " ").trim().slice(0, 160) || "",
     }))
     .filter((heading) => heading.text.length > 0);
 }
@@ -65,22 +80,30 @@ function collectTables(): PageTableSummary[] {
       const preview = rows.map((row) =>
         Array.from(row.querySelectorAll("th,td"))
           .slice(0, 5)
-          .map((cell) => cell.textContent?.replace(/\s+/g, " ").trim().slice(0, 80) || "")
+          .map(
+            (cell) =>
+              cell.textContent?.replace(/\s+/g, " ").trim().slice(0, 80) || "",
+          ),
       );
 
       return {
         id: `table_${index + 1}`,
         rowCount: table.querySelectorAll("tr").length,
         columnCount: preview[0]?.length ?? 0,
-        caption: table.querySelector("caption")?.textContent?.replace(/\s+/g, " ").trim().slice(0, 120),
-        preview
+        caption: table
+          .querySelector("caption")
+          ?.textContent?.replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 120),
+        preview,
       };
     });
 }
 
 function getRole(element: Element) {
-  if (element.getAttribute("role")) {
-    return element.getAttribute("role") || "unknown";
+  const ariaRole = element.getAttribute("role");
+  if (ariaRole) {
+    return ariaRole;
   }
 
   if (element instanceof HTMLButtonElement) return "button";
@@ -104,7 +127,7 @@ function collectInteractiveElements(): InteractiveElement[] {
     "[role='link']",
     "[role='checkbox']",
     "[role='textbox']",
-    "[contenteditable='true']"
+    "[contenteditable='true']",
   ].join(",");
 
   return Array.from(document.querySelectorAll(selector))
@@ -122,17 +145,24 @@ function collectInteractiveElements(): InteractiveElement[] {
         role: getRole(element),
         label: getElementLabel(element),
         valuePreview: sensitive ? undefined : inputElement.value?.slice(0, 80),
-        inputType: element instanceof HTMLInputElement ? element.type : undefined,
+        inputType:
+          element instanceof HTMLInputElement ? element.type : undefined,
         placeholder:
-          element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.placeholder : undefined,
+          element instanceof HTMLInputElement ||
+          element instanceof HTMLTextAreaElement
+            ? element.placeholder
+            : undefined,
         rect: {
           x: Math.round(rect.x),
           y: Math.round(rect.y),
           width: Math.round(rect.width),
-          height: Math.round(rect.height)
+          height: Math.round(rect.height),
         },
         riskLevel,
-        disabled: Boolean((element as HTMLInputElement | HTMLButtonElement | HTMLSelectElement).disabled)
+        disabled: Boolean(
+          (element as HTMLInputElement | HTMLButtonElement | HTMLSelectElement)
+            .disabled,
+        ),
       };
     });
 }
@@ -149,6 +179,6 @@ export function collectPageContext(): PageContext {
     headings: collectHeadings(),
     tables: collectTables(),
     interactiveElements: collectInteractiveElements(),
-    collectedAt: new Date().toISOString()
+    collectedAt: new Date().toISOString(),
   };
 }

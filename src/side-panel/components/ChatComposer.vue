@@ -15,6 +15,7 @@ const emit = defineEmits<{
 }>();
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
+const isComposing = ref(false);
 
 function resizeTextarea(textarea = textareaRef.value) {
   if (!textarea) {
@@ -22,10 +23,15 @@ function resizeTextarea(textarea = textareaRef.value) {
   }
 
   textarea.style.height = "auto";
-  const maxHeight = Number.parseFloat(window.getComputedStyle(textarea).maxHeight);
-  const nextHeight = Number.isFinite(maxHeight) ? Math.min(textarea.scrollHeight, maxHeight) : textarea.scrollHeight;
+  const maxHeight = Number.parseFloat(
+    window.getComputedStyle(textarea).maxHeight,
+  );
+  const nextHeight = Number.isFinite(maxHeight)
+    ? Math.min(textarea.scrollHeight, maxHeight)
+    : textarea.scrollHeight;
   textarea.style.height = `${nextHeight}px`;
-  textarea.style.overflowY = textarea.scrollHeight > nextHeight ? "auto" : "hidden";
+  textarea.style.overflowY =
+    textarea.scrollHeight > nextHeight ? "auto" : "hidden";
 }
 
 function handleInput(event: Event) {
@@ -44,13 +50,26 @@ function submit() {
   emit("update:modelValue", "");
 }
 
+function handleEnterKeydown(event: KeyboardEvent) {
+  if (isComposing.value || event.isComposing || event.keyCode === 229) {
+    return;
+  }
+
+  event.preventDefault();
+  submit();
+}
+
 function handleActionClick() {
   if (props.loading) {
     emit("stop");
   }
 }
 
-watch(() => props.modelValue, () => nextTick(() => resizeTextarea()), { flush: "post" });
+watch(
+  () => props.modelValue,
+  () => nextTick(() => resizeTextarea()),
+  { flush: "post" },
+);
 
 onMounted(() => resizeTextarea());
 </script>
@@ -65,14 +84,26 @@ onMounted(() => resizeTextarea());
         placeholder="输入你想让 Agent 处理的任务"
         :disabled="loading"
         @input="handleInput"
-        @keydown.enter.exact.prevent="submit"
+        @compositionstart="isComposing = true"
+        @compositionend="isComposing = false"
+        @keydown.enter.exact="handleEnterKeydown"
       />
       <div class="composer-toolbar">
-        <button class="composer-tool-button composer-plus-button" type="button" title="添加内容" aria-label="添加内容">
+        <button
+          class="composer-tool-button composer-plus-button"
+          type="button"
+          title="添加内容"
+          aria-label="添加内容"
+        >
           <span aria-hidden="true">+</span>
         </button>
         <div class="composer-actions">
-          <button class="composer-tool-button" type="button" title="语音输入" aria-label="语音输入">
+          <button
+            class="composer-tool-button"
+            type="button"
+            title="语音输入"
+            aria-label="语音输入"
+          >
             <span class="mic-icon" aria-hidden="true" />
           </button>
           <button

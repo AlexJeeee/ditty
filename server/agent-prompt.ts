@@ -1,4 +1,12 @@
 import { MODEL_TOOL_PLAN_STEPS } from "./model-tools";
+
+/**
+ * System prompt for the AI agent. Instructs the model to respond in Chinese,
+ * use available tools only when necessary, and never claim actions have been
+ * executed (tool calls only create pending confirmations).
+ */
+export const SYSTEM_PROMPT =
+  "你是一个运行在 Chrome 侧边栏里的网页 AI 助手。请用中文回答，优先结合用户任务和网页上下文。你可以在用户明确要求或任务确实需要时调用可用工具。工具调用只会生成待确认动作，不会立即执行；不要声称你已经打开、点击、填写或修改了网页。如果工具参数不确定，请不要猜测，改为向用户说明缺口。";
 import { createScopedId } from "../src/shared/id";
 import type { AgentAction, AgentPlan, PageContext } from "../src/shared/types";
 
@@ -9,7 +17,7 @@ export function createPlan(pageContext: PageContext): AgentPlan {
       toolName: "read_page",
       riskLevel: "low",
       requiresConfirmation: false,
-      reason: `读取当前页面标题、URL、选区和可见文本摘要：${pageContext.title || pageContext.origin || "当前页面"}。`
+      reason: `读取当前页面标题、URL、选区和可见文本摘要：${pageContext.title || pageContext.origin || "当前页面"}。`,
     },
     {
       id: createScopedId("action"),
@@ -17,27 +25,36 @@ export function createPlan(pageContext: PageContext): AgentPlan {
       riskLevel: "low",
       requiresConfirmation: false,
       input: {
-        text: pageContext.selectedText || pageContext.visibleTextSummary.slice(0, 240)
+        text:
+          pageContext.selectedText ||
+          pageContext.visibleTextSummary.slice(0, 240),
       },
-      reason: pageContext.selectedText ? "优先结合用户选中的网页文本回答。" : "未检测到选区，结合页面可见内容摘要回答。"
+      reason: pageContext.selectedText
+        ? "优先结合用户选中的网页文本回答。"
+        : "未检测到选区，结合页面可见内容摘要回答。",
     },
     ...MODEL_TOOL_PLAN_STEPS.map((step) => ({
       ...step,
-      id: createScopedId("action")
-    }))
+      id: createScopedId("action"),
+    })),
   ];
 
   return {
-    summary: "已接入 OpenAI 真实模型。模型可以请求打开网页，但必须先生成白名单工具动作并等待你确认。",
+    summary:
+      "已接入 OpenAI 真实模型。模型可以请求打开网页，但必须先生成白名单工具动作并等待你确认。",
     steps,
-    blockedActions: []
+    blockedActions: [],
   };
 }
 
 export function buildPrompt(goal: string, pageContext: PageContext) {
   const elements = pageContext.interactiveElements
     .map((element, index) => {
-      const label = element.label || element.placeholder || element.valuePreview || element.role;
+      const label =
+        element.label ||
+        element.placeholder ||
+        element.valuePreview ||
+        element.role;
       return `${index + 1}. ${element.role} ${label ? `- ${label}` : ""} [risk=${element.riskLevel}]`;
     })
     .join("\n");
@@ -58,9 +75,11 @@ export function buildPrompt(goal: string, pageContext: PageContext) {
     pageContext.visibleTextSummary || "(无)",
     "",
     "页面标题结构：",
-    pageContext.headings.map((heading) => `${"#".repeat(heading.level)} ${heading.text}`).join("\n") || "(无)",
+    pageContext.headings
+      .map((heading) => `${"#".repeat(heading.level)} ${heading.text}`)
+      .join("\n") || "(无)",
     "",
     "可交互元素摘要：",
-    elements || "(无)"
+    elements || "(无)",
   ].join("\n");
 }

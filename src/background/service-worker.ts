@@ -7,16 +7,16 @@ import type {
   SelectionActionResponse,
   SelectionActionInvokeMessage,
   SelectionActionPayload,
-  PageContextResponse
+  PageContextResponse,
 } from "@/shared/extension-messages";
 import { PENDING_SELECTION_ACTION_STORAGE_KEY } from "@/shared/extension-messages";
 import { executeAgentAction } from "./action-executors";
-import type { AgentActionResult, ExtensionError, PageContext } from "@/shared/types";
-
-async function getActiveTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab;
-}
+import { getActiveTab, isTabUrlAccessible } from "./tab-utils";
+import type {
+  AgentActionResult,
+  ExtensionError,
+  PageContext,
+} from "@/shared/types";
 
 async function getTargetTab(tabId?: number) {
   if (typeof tabId === "number") {
@@ -26,14 +26,12 @@ async function getTargetTab(tabId?: number) {
   return getActiveTab();
 }
 
-function isTabUrlAccessible(url: string) {
-  return !url.startsWith("chrome://") && !url.startsWith("chrome-extension://");
-}
-
 function getOrigin(url: string) {
   try {
     const parsed = new URL(url);
-    return parsed.origin === "null" ? `${parsed.protocol}//${parsed.hostname}` : parsed.origin;
+    return parsed.origin === "null"
+      ? `${parsed.protocol}//${parsed.hostname}`
+      : parsed.origin;
   } catch {
     return url;
   }
@@ -47,29 +45,34 @@ function createFallbackPageContext(tab: chrome.tabs.Tab): PageContext {
     origin: url ? getOrigin(url) : "",
     title: tab.title || "当前浏览器页面",
     selectedText: "",
-    visibleTextSummary: "当前页面不支持内容脚本读取，Agent 只能执行浏览器级工具。",
+    visibleTextSummary:
+      "当前页面不支持内容脚本读取，Agent 只能执行浏览器级工具。",
     headings: [],
     tables: [],
     interactiveElements: [],
-    collectedAt: new Date().toISOString()
+    collectedAt: new Date().toISOString(),
   };
 }
 
-function normalizeTabStatus(status: chrome.tabs.Tab["status"]): ActiveTabChangedMessage["payload"]["status"] {
-  return status === "loading" || status === "complete" || status === "unloaded" ? status : undefined;
+function normalizeTabStatus(
+  status: chrome.tabs.Tab["status"],
+): ActiveTabChangedMessage["payload"]["status"] {
+  return status === "loading" || status === "complete" || status === "unloaded"
+    ? status
+    : undefined;
 }
 
 function toExtensionError(error: unknown, fallback: string): ExtensionError {
   return {
     code: "UNKNOWN_ERROR",
     message: error instanceof Error ? error.message : fallback,
-    retryable: true
+    retryable: true,
   };
 }
 
 async function sendToTab<T>(
   message: GetPageContextMessage | ExecuteActionMessage,
-  tabId?: number
+  tabId?: number,
 ): Promise<ExtensionResponse<T>> {
   const tab = await getTargetTab(tabId);
 
@@ -79,8 +82,8 @@ async function sendToTab<T>(
       error: {
         code: "TAB_NOT_ACCESSIBLE",
         message: "当前页面不支持插件读取，请切换到普通网页后重试。",
-        retryable: false
-      }
+        retryable: false,
+      },
     };
   }
 
@@ -91,29 +94,34 @@ async function sendToTab<T>(
       ok: false,
       error: {
         code: "CONTENT_SCRIPT_UNAVAILABLE",
-        message: error instanceof Error ? error.message : "当前页面脚本未就绪，请刷新页面后重试。",
-        retryable: true
-      }
+        message:
+          error instanceof Error
+            ? error.message
+            : "当前页面脚本未就绪，请刷新页面后重试。",
+        retryable: true,
+      },
     };
   }
 }
 
-async function getPageContext(message: GetPageContextMessage): Promise<PageContextResponse> {
+async function getPageContext(
+  message: GetPageContextMessage,
+): Promise<PageContextResponse> {
   const tab = await getTargetTab(message.payload.tabId);
 
   if (!tab?.id || !tab.url || !isTabUrlAccessible(tab.url)) {
     return tab
       ? {
           ok: true,
-          data: createFallbackPageContext(tab)
+          data: createFallbackPageContext(tab),
         }
       : {
           ok: false,
           error: {
             code: "TAB_NOT_ACCESSIBLE",
             message: "没有可读取的当前标签页。",
-            retryable: true
-          }
+            retryable: true,
+          },
         };
   }
 
@@ -122,22 +130,28 @@ async function getPageContext(message: GetPageContextMessage): Promise<PageConte
 
 async function handleSelectionAction(
   message: SelectionActionInvokeMessage,
-  sender: chrome.runtime.MessageSender
+  sender: chrome.runtime.MessageSender,
 ): Promise<ExtensionResponse<SelectionActionPayload>> {
   const openSidePanelPromise = openAgentSidePanel(sender);
   const storeSelectionPromise = chrome.storage.local.set({
-    [PENDING_SELECTION_ACTION_STORAGE_KEY]: message.payload
+    [PENDING_SELECTION_ACTION_STORAGE_KEY]: message.payload,
   });
 
-  const [openResult] = await Promise.allSettled([openSidePanelPromise, storeSelectionPromise]);
+  const [openResult] = await Promise.allSettled([
+    openSidePanelPromise,
+    storeSelectionPromise,
+  ]);
 
   if (openResult.status === "rejected") {
-    console.warn("Unable to open side panel from selection action.", openResult.reason);
+    console.warn(
+      "Unable to open side panel from selection action.",
+      openResult.reason,
+    );
   }
 
   return {
     ok: true,
-    data: message.payload
+    data: message.payload,
   };
 }
 
@@ -166,8 +180,8 @@ async function notifyActiveTabChanged(tabId: number, windowId: number) {
         windowId,
         url: tab.url,
         title: tab.title,
-        status: normalizeTabStatus(tab.status)
-      }
+        status: normalizeTabStatus(tab.status),
+      },
     };
 
     await chrome.runtime.sendMessage(message);
@@ -177,9 +191,11 @@ async function notifyActiveTabChanged(tabId: number, windowId: number) {
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {
-    // Older Chrome versions may not support this helper. action.onClicked below is the fallback.
-  });
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch(() => {
+      // Older Chrome versions may not support this helper. action.onClicked below is the fallback.
+    });
 });
 
 chrome.action.onClicked.addListener(async (tab) => {
@@ -199,7 +215,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     return;
   }
 
-  if (!changeInfo.url && !changeInfo.title && changeInfo.status !== "complete") {
+  if (
+    !changeInfo.url &&
+    !changeInfo.title &&
+    changeInfo.status !== "complete"
+  ) {
     return;
   }
 
@@ -210,21 +230,38 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "page_context:get") {
     getPageContext(message)
       .then((response: PageContextResponse) => sendResponse(response))
-      .catch((error) => sendResponse({ ok: false, error: toExtensionError(error, "页面上下文读取失败。") }));
+      .catch((error) =>
+        sendResponse({
+          ok: false,
+          error: toExtensionError(error, "页面上下文读取失败。"),
+        }),
+      );
     return true;
   }
 
   if (message.type === "agent_action:execute") {
-    executeAgentAction(message, (actionMessage) => sendToTab<AgentActionResult>(actionMessage))
+    executeAgentAction(message, (actionMessage) =>
+      sendToTab<AgentActionResult>(actionMessage),
+    )
       .then((response: ActionExecutionResponse) => sendResponse(response))
-      .catch((error) => sendResponse({ ok: false, error: toExtensionError(error, "动作执行失败。") }));
+      .catch((error) =>
+        sendResponse({
+          ok: false,
+          error: toExtensionError(error, "动作执行失败。"),
+        }),
+      );
     return true;
   }
 
   if (message.type === "selection_action:invoke") {
     handleSelectionAction(message, _sender)
       .then((response: SelectionActionResponse) => sendResponse(response))
-      .catch((error) => sendResponse({ ok: false, error: toExtensionError(error, "选中文本操作失败。") }));
+      .catch((error) =>
+        sendResponse({
+          ok: false,
+          error: toExtensionError(error, "选中文本操作失败。"),
+        }),
+      );
     return true;
   }
 
