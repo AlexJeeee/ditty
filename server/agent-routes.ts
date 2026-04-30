@@ -44,6 +44,7 @@ interface CreateAgentRunBody {
 
 interface StreamAgentRunBody {
   pageContext?: PageContext;
+  conversation?: ModelConversationMessage[];
 }
 
 const MAX_HISTORY_MESSAGES = 40;
@@ -406,6 +407,7 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
             currentUserMessage,
           ],
           currentUserMessage,
+          currentUserMessageEmitted: false,
         });
 
         return run;
@@ -434,11 +436,20 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
       }
 
       const { run } = stored;
+      const continuationConversation = request.body?.conversation
+        ? validateConversation(request.body.conversation)
+        : null;
       const pageContext = request.body?.pageContext
         ? validatePageContext(request.body.pageContext)
         : stored.pageContext;
+      const isContinuation = Boolean(continuationConversation);
       const abortController = new AbortController();
       let clientClosed = false;
+
+      if (continuationConversation) {
+        stored.conversation = continuationConversation;
+        stored.pageContext = pageContext;
+      }
 
       activeStreams.get(run.id)?.abortController.abort();
       activeStreams.set(run.id, { abortController });
@@ -467,16 +478,21 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
         runId: run.id,
         status: "planning",
       });
-      writeSseEvent(reply.raw, {
-        type: "conversation_message",
-        runId: run.id,
-        message: stored.currentUserMessage,
-      });
+      if (!stored.currentUserMessageEmitted) {
+        writeSseEvent(reply.raw, {
+          type: "conversation_message",
+          runId: run.id,
+          message: stored.currentUserMessage,
+        });
+        stored.currentUserMessageEmitted = true;
+      }
       writeSseEvent(reply.raw, {
         type: "message_delta",
         runId: run.id,
         messageId: thinkingMessageId,
-        text: `已读取当前页面：${pageContext.title || pageContext.origin || "当前页面"}。正在调用 OpenAI ${model} 生成回答。`,
+        text: isContinuation
+          ? `已收到动作结果，并重新读取当前页面：${pageContext.title || pageContext.origin || "当前页面"}。正在调用 OpenAI ${model} 判断下一步。`
+          : `已读取当前页面：${pageContext.title || pageContext.origin || "当前页面"}。正在调用 OpenAI ${model} 生成回答。`,
         channel: "thinking",
       });
       writeSseEvent(reply.raw, {
@@ -487,11 +503,13 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
         channel: "thinking",
         done: true,
       });
-      writeSseEvent(reply.raw, {
-        type: "plan",
-        runId: run.id,
-        plan: createPlan(pageContext),
-      });
+      if (!isContinuation) {
+        writeSseEvent(reply.raw, {
+          type: "plan",
+          runId: run.id,
+          plan: createPlan(pageContext),
+        });
+      }
       setRunStatus(stored, "running");
       writeSseEvent(reply.raw, {
         type: "status",

@@ -18,6 +18,11 @@ import type {
   PageContext,
 } from "@/shared/types";
 
+const PAGE_CONTEXT_RETRY_DELAYS = [0, 300, 500, 800, 1200, 1800];
+
+const delay = (ms: number) =>
+  new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+
 const getTargetTab = async (tabId?: number) => {
   if (typeof tabId === "number") {
     return chrome.tabs.get(tabId);
@@ -71,6 +76,40 @@ const toExtensionError = (error: unknown, fallback: string): ExtensionError => {
 };
 
 const sendToTab = async <T>(
+  message: GetPageContextMessage | ExecuteActionMessage,
+  tabId?: number,
+): Promise<ExtensionResponse<T>> => {
+  if (message.type === "page_context:get") {
+    let lastResponse: ExtensionResponse<T> | null = null;
+
+    for (const retryDelay of PAGE_CONTEXT_RETRY_DELAYS) {
+      if (retryDelay > 0) {
+        await delay(retryDelay);
+      }
+
+      lastResponse = await sendToTabOnce<T>(message, tabId);
+
+      if (lastResponse.ok || !lastResponse.error.retryable) {
+        return lastResponse;
+      }
+    }
+
+    return (
+      lastResponse ?? {
+        ok: false,
+        error: {
+          code: "CONTENT_SCRIPT_UNAVAILABLE",
+          message: "当前页面脚本未就绪，请稍后重试。",
+          retryable: true,
+        },
+      }
+    );
+  }
+
+  return sendToTabOnce<T>(message, tabId);
+};
+
+const sendToTabOnce = async <T>(
   message: GetPageContextMessage | ExecuteActionMessage,
   tabId?: number,
 ): Promise<ExtensionResponse<T>> => {

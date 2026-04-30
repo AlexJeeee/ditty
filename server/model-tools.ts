@@ -38,6 +38,13 @@ interface ClickElementToolArguments {
   reason?: string;
 }
 
+interface FillInputToolArguments {
+  element_id: string;
+  value: string;
+  description?: string;
+  reason?: string;
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 };
@@ -146,6 +153,62 @@ const createClickElementActionFromArguments = (
   };
 };
 
+const parseFillInputArguments = (
+  value: unknown,
+): FillInputToolArguments | null => {
+  if (
+    !isRecord(value) ||
+    typeof value.element_id !== "string" ||
+    typeof value.value !== "string"
+  ) {
+    return null;
+  }
+
+  const elementId = value.element_id.trim();
+  if (!elementId) {
+    return null;
+  }
+
+  return {
+    element_id: elementId,
+    value: value.value,
+    description:
+      typeof value.description === "string" ? value.description : undefined,
+    reason: typeof value.reason === "string" ? value.reason : undefined,
+  };
+};
+
+const createFillInputActionFromArguments = (
+  value: unknown,
+): PendingToolActionResult => {
+  const args = parseFillInputArguments(value);
+
+  if (!args) {
+    return {
+      blockedReason: "模型请求 fill_input，但参数格式未通过校验。",
+    };
+  }
+
+  const description = args.description?.trim() || args.element_id;
+  const reason = args.reason?.trim() || `填写输入框：${description}`;
+
+  return {
+    action: {
+      toolName: "fill_input",
+      riskLevel: "medium",
+      requiresConfirmation: true,
+      target: {
+        elementId: args.element_id,
+        description,
+      },
+      input: {
+        value: args.value,
+      },
+      reason,
+    },
+  };
+};
+
 const MODEL_TOOL_DEFINITIONS: ModelToolDefinition[] = [
   {
     toolName: "open_url",
@@ -223,6 +286,48 @@ const MODEL_TOOL_DEFINITIONS: ModelToolDefinition[] = [
         "如果任务需要点击当前网页中的明确 DOM 元素，模型会生成 click_element 动作，执行前仍需用户确认。",
     },
     createActionFromArguments: createClickElementActionFromArguments,
+  },
+  {
+    toolName: "fill_input",
+    chatTool: {
+      type: "function",
+      function: {
+        name: "fill_input",
+        description:
+          "请求 Chrome 扩展在用户确认后填写当前页面上下文里采集到的输入框、文本域、下拉框或可编辑区域。只能使用可交互元素摘要中明确给出的 element_id，不要填写密码、验证码、token、支付信息等敏感字段。",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            element_id: {
+              type: "string",
+              description: "页面上下文可交互元素摘要中的 id，例如 el_1_ab123。",
+            },
+            value: {
+              type: "string",
+              description: "要填入目标输入框的文本。清空输入框时传空字符串。",
+            },
+            description: {
+              type: "string",
+              description: "目标输入框的人类可读描述，例如搜索框占位文本。",
+            },
+            reason: {
+              type: "string",
+              description: "向用户说明为什么需要填写这个输入框。",
+            },
+          },
+          required: ["element_id", "value", "description", "reason"],
+        },
+      },
+    },
+    planStep: {
+      toolName: "fill_input",
+      riskLevel: "medium",
+      requiresConfirmation: true,
+      reason:
+        "如果任务需要填写当前网页中的明确输入控件，模型会生成 fill_input 动作，执行前仍需用户确认。",
+    },
+    createActionFromArguments: createFillInputActionFromArguments,
   },
 ];
 

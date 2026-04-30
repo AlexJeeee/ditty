@@ -5,7 +5,10 @@ import {
   stopAgentRun,
   streamAgentRun,
 } from "@/shared/api-client";
-import type { ActionExecutionResponse } from "@/shared/extension-messages";
+import type {
+  ActionExecutionResponse,
+  PageContextResponse,
+} from "@/shared/extension-messages";
 import type {
   AgentAction,
   AgentActionResult,
@@ -29,6 +32,7 @@ import {
 
 const delay = (ms: number) =>
   new Promise((resolve) => window.setTimeout(resolve, ms));
+const CONTINUATION_CONTEXT_RETRY_DELAYS = [300, 1000, 1800];
 
 export const useAgentRunStore = defineStore("agent-run", () => {
   const run = ref<AgentRun | null>(null);
@@ -38,6 +42,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
   const results = ref<AgentActionResult[]>([]);
   const messages = ref([createWelcomeMessage()]);
   const modelConversation = ref<ModelConversationMessage[]>([]);
+  const currentPageContext = ref<PageContext | null>(null);
   const loading = ref(false);
   const stopping = ref(false);
   const stopRequested = ref(false);
@@ -60,6 +65,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     results.value = [];
     messages.value = [];
     modelConversation.value = [];
+    currentPageContext.value = null;
     error.value = null;
     stopping.value = false;
     stopRequested.value = false;
@@ -132,9 +138,143 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     }
 
     if (result.autoAction) {
-      await executeAction(result.autoAction, {
-        completionText: "动作已自动完成。我会继续把执行结果保留在当前对话里。",
+      await executeAction(result.autoAction);
+    }
+  };
+
+  const consumeRunStream = async (
+    pageContext: PageContext,
+    abortController: AbortController,
+    options?: { conversation?: ModelConversationMessage[] },
+  ) => {
+    currentPageContext.value = pageContext;
+
+    for await (const event of streamAgentRun(run.value!, pageContext, {
+      signal: abortController.signal,
+      conversation: options?.conversation,
+    })) {
+      await applyEvent(event);
+    }
+  };
+
+  const getContinuationTabId = (result: AgentActionResult) => {
+    const output = result.output;
+
+    if (!output || typeof output !== "object" || Array.isArray(output)) {
+      return undefined;
+    }
+
+    const outputRecord = output as Record<string, unknown>;
+    if (typeof outputRecord.tabId === "number") {
+      return outputRecord.tabId;
+    }
+
+    const pageAction = outputRecord.pageAction;
+    if (
+      !pageAction ||
+      typeof pageAction !== "object" ||
+      Array.isArray(pageAction)
+    ) {
+      return undefined;
+    }
+
+    const targetTab = (pageAction as Record<string, unknown>).targetTab;
+    if (
+      !targetTab ||
+      typeof targetTab !== "object" ||
+      Array.isArray(targetTab)
+    ) {
+      return undefined;
+    }
+
+    const id = (targetTab as Record<string, unknown>).id;
+    return typeof id === "number" ? id : undefined;
+  };
+
+  const refreshPageContextForContinuation = async (tabId?: number) => {
+    for (const retryDelay of CONTINUATION_CONTEXT_RETRY_DELAYS) {
+      await delay(retryDelay);
+
+      try {
+        const response = (await chrome.runtime.sendMessage({
+          type: "page_context:get",
+          payload: {
+            includeSelection: true,
+            includeInteractiveElements: true,
+            tabId,
+          },
+        })) as PageContextResponse;
+
+        if (response?.ok) {
+          currentPageContext.value = response.data;
+          return response.data;
+        }
+      } catch {
+        // The target tab may still be navigating; retry before falling back.
+      }
+    }
+
+    return tabId ? null : currentPageContext.value;
+  };
+
+  const continueAfterToolResult = async (result: AgentActionResult) => {
+    if (!run.value) {
+      return;
+    }
+
+    const nextPageContext = await refreshPageContextForContinuation(
+      getContinuationTabId(result),
+    );
+
+    if (!nextPageContext) {
+      applyEvent({ type: "status", runId: run.value.id, status: "completed" });
+      await streamLocalAssistantText(
+        "动作结果已记录，但新页面上下文暂时不可读。请等页面加载完成后刷新上下文继续。",
+      );
+      return;
+    }
+
+    const abortController = new AbortController();
+    activeAbortController.value = abortController;
+
+    try {
+      await consumeRunStream(nextPageContext, abortController, {
+        conversation: modelConversation.value,
       });
+    } catch (caught) {
+      if (stopRequested.value || isAbortError(caught)) {
+        if (!silentStopRequested.value) {
+          markStopped();
+          pushMessage(
+            { messages: messages.value },
+            {
+              role: "assistant",
+              kind: "text",
+              content: "已终止当前回答。",
+            },
+          );
+        }
+        return;
+      }
+
+      error.value = {
+        code: "UNKNOWN_ERROR",
+        message:
+          caught instanceof Error ? caught.message : "Agent 继续运行失败。",
+        retryable: true,
+      };
+      pushMessage(
+        { messages: messages.value },
+        {
+          role: "assistant",
+          kind: "error",
+          content: error.value.message,
+        },
+      );
+    } finally {
+      if (activeAbortController.value === abortController) {
+        activeAbortController.value = null;
+      }
     }
   };
 
@@ -149,6 +289,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     stopRequested.value = false;
     silentStopRequested.value = false;
     activeAbortController.value = abortController;
+    currentPageContext.value = pageContext;
     error.value = null;
     plan.value = null;
     pendingAction.value = null;
@@ -173,11 +314,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
         },
       );
 
-      for await (const event of streamAgentRun(run.value, pageContext, {
-        signal: abortController.signal,
-      })) {
-        await applyEvent(event);
-      }
+      await consumeRunStream(pageContext, abortController);
     } catch (caught) {
       if (stopRequested.value || isAbortError(caught)) {
         if (!silentStopRequested.value) {
@@ -239,10 +376,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     }
   };
 
-  const executeAction = async (
-    action: AgentAction,
-    options?: { completionText?: string },
-  ) => {
+  const executeAction = async (action: AgentAction) => {
     if (!run.value) {
       return;
     }
@@ -279,19 +413,28 @@ export const useAgentRunStore = defineStore("agent-run", () => {
         result.status === "succeeded" ? "confirmed" : "rejected",
       );
       applyEvent({ type: "action_result", runId: run.value.id, result });
-      applyEvent({
-        type: "status",
-        runId: run.value.id,
-        status: result.status === "succeeded" ? "completed" : "failed",
-      });
-      await streamLocalAssistantText(
-        result.status === "succeeded"
-          ? (options?.completionText ??
-              "动作已完成。我会继续把执行结果保留在当前对话里。")
-          : "动作没有成功执行，原因已经显示在上方。",
-      );
+
+      if (action.toolCallId) {
+        await continueAfterToolResult(result);
+      } else {
+        applyEvent({
+          type: "status",
+          runId: run.value.id,
+          status: result.status === "succeeded" ? "completed" : "failed",
+        });
+        await streamLocalAssistantText(
+          result.status === "succeeded"
+            ? "动作已完成。我会继续把执行结果保留在当前对话里。"
+            : "动作没有成功执行，原因已经显示在上方。",
+        );
+      }
     } finally {
+      stopping.value = false;
+      silentStopRequested.value = false;
       loading.value = false;
+      if (activeAbortController.value?.signal.aborted) {
+        activeAbortController.value = null;
+      }
     }
   };
 
@@ -303,11 +446,12 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     await executeAction(pendingAction.value);
   };
 
-  const rejectPendingAction = () => {
+  const rejectPendingAction = async () => {
     if (!pendingAction.value || !run.value) {
       return;
     }
 
+    loading.value = true;
     const action = pendingAction.value;
     const result: AgentActionResult = {
       actionId: action.id,
@@ -319,8 +463,23 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     appendToolConversationMessage(action, result);
     pendingAction.value = null;
     applyEvent({ type: "action_result", runId: run.value.id, result });
-    applyEvent({ type: "status", runId: run.value.id, status: "completed" });
-    void streamLocalAssistantText("已跳过该动作。我不会修改当前网页。");
+
+    try {
+      if (action.toolCallId) {
+        await continueAfterToolResult(result);
+      } else {
+        applyEvent({
+          type: "status",
+          runId: run.value.id,
+          status: "completed",
+        });
+        await streamLocalAssistantText("已跳过该动作。我不会修改当前网页。");
+      }
+    } finally {
+      stopping.value = false;
+      silentStopRequested.value = false;
+      loading.value = false;
+    }
   };
 
   const appendToolConversationMessage = (

@@ -98,6 +98,10 @@ interface AgentRequestOptions {
   signal?: AbortSignal;
 }
 
+interface StreamAgentRunOptions extends AgentRequestOptions {
+  conversation?: ModelConversationMessage[];
+}
+
 interface StopAgentRunResponse {
   ok: boolean;
   status: AgentRun["status"];
@@ -134,7 +138,7 @@ export const createAgentRun = async (
 export async function* streamAgentRun(
   run: AgentRun,
   pageContext: PageContext,
-  options?: AgentRequestOptions,
+  options?: StreamAgentRunOptions,
 ): AsyncGenerator<AgentRunEvent> {
   let response: Response;
 
@@ -149,6 +153,9 @@ export async function* streamAgentRun(
         },
         body: JSON.stringify({
           pageContext,
+          ...(options?.conversation
+            ? { conversation: options.conversation }
+            : {}),
         }),
         signal: options?.signal,
       },

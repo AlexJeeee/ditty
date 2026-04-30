@@ -88,6 +88,64 @@ const clickElement = (element: Element) => {
   htmlElement.click();
 };
 
+const setNativeValue = (
+  element: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+) => {
+  const prototype = Object.getPrototypeOf(element) as
+    | HTMLInputElement
+    | HTMLTextAreaElement;
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+
+  if (descriptor?.set) {
+    descriptor.set.call(element, value);
+  } else {
+    element.value = value;
+  }
+};
+
+const dispatchFormInputEvents = (element: Element) => {
+  element.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  element.dispatchEvent(new Event("change", { bubbles: true }));
+};
+
+const fillElement = (element: Element, value: string) => {
+  const htmlElement = element as HTMLElement;
+
+  htmlElement.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+    inline: "center",
+  });
+
+  if (typeof htmlElement.focus === "function") {
+    htmlElement.focus({ preventScroll: true });
+  }
+
+  if (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement
+  ) {
+    setNativeValue(element, value);
+    dispatchFormInputEvents(element);
+    return "input";
+  }
+
+  if (element instanceof HTMLSelectElement) {
+    element.value = value;
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+    return "select";
+  }
+
+  if (element.getAttribute("contenteditable") === "true") {
+    element.textContent = value;
+    dispatchFormInputEvents(element);
+    return "contenteditable";
+  }
+
+  return null;
+};
+
 export const executeAction = async (
   action: AgentAction,
 ): Promise<AgentActionResult> => {
@@ -161,21 +219,14 @@ export const executeAction = async (
 
   if (action.toolName === "fill_input") {
     const value = action.input?.value ?? "";
-    if (
-      element instanceof HTMLInputElement ||
-      element instanceof HTMLTextAreaElement ||
-      element instanceof HTMLSelectElement
-    ) {
-      element.value = value;
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      element.dispatchEvent(new Event("change", { bubbles: true }));
-      return createResult(action, "succeeded", "已填写目标输入框。");
-    }
+    const filledType = fillElement(element, value);
 
-    if (element.getAttribute("contenteditable") === "true") {
-      element.textContent = value;
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      return createResult(action, "succeeded", "已填写可编辑区域。");
+    if (filledType) {
+      return createResult(
+        action,
+        "succeeded",
+        filledType === "select" ? "已选择目标选项。" : "已填写目标输入框。",
+      );
     }
 
     return createResult(action, "failed", "目标元素不是可填写控件。");

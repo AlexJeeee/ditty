@@ -14,6 +14,7 @@ export interface StoredRun {
   pageContext: PageContext;
   conversation: ModelConversationMessage[];
   currentUserMessage: ModelConversationMessage & { role: "user" };
+  currentUserMessageEmitted: boolean;
 }
 
 export interface ActiveStream {
