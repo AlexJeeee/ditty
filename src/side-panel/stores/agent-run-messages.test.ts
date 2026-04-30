@@ -71,7 +71,7 @@ describe("agent-run message helpers", () => {
     ]);
   });
 
-  it("adds plan messages and updates the current run", () => {
+  it("keeps plan state without adding visible plan messages", () => {
     const state = createState();
     const plan: AgentPlan = {
       summary: "Plan summary",
@@ -87,11 +87,30 @@ describe("agent-run message helpers", () => {
 
     expect(state.plan).toBe(plan);
     expect(state.run?.plan).toBe(plan);
-    expect(state.messages[0]).toMatchObject({
-      role: "assistant",
-      kind: "plan",
-      plan,
+    expect(state.messages).toEqual([]);
+  });
+
+  it("does not add visible thinking messages", () => {
+    const state = createState();
+
+    applyAgentRunEvent(state, {
+      type: "message_delta",
+      runId: "run_1",
+      messageId: "thinking_1",
+      text: "thinking",
+      channel: "thinking",
     });
+    applyAgentRunEvent(state, {
+      type: "message_delta",
+      runId: "run_1",
+      messageId: "thinking_1",
+      text: "",
+      channel: "thinking",
+      done: true,
+    });
+
+    expect(state.events).toHaveLength(2);
+    expect(state.messages).toEqual([]);
   });
 
   it("tracks action requests and action results", () => {

@@ -16,7 +16,7 @@ import {
 const auth = useAuthStore();
 const pageContext = usePageContextStore();
 const agentRun = useAgentRunStore();
-const composerGoal = ref("总结当前页面，并指出可以安全执行的下一步");
+const composerGoal = ref("");
 const handledSelectionActionId = ref("");
 
 onMounted(() => {
@@ -50,9 +50,9 @@ const createSelectionGoal = (payload: SelectionActionPayload) => {
   const text = payload.selectedText.trim();
   const source = payload.pageTitle || payload.pageUrl;
   const prompts: Record<SelectionMenuAction, string> = {
-    translate: `请将以下网页选中文本翻译成自然、准确的中文，并保留关键信息。\n\n来源：${source}\n\n${text}`,
-    explain: `请解释以下网页选中文本的含义，提炼重点，并在必要时补充背景。\n\n来源：${source}\n\n${text}`,
-    add_to_chat: `请基于以下网页选中文本继续对话。\n\n来源：${source}\n\n${text}`,
+    translate: `请将以下网页选中文本翻译成自然、准确的中文，并保留关键信息。\n\n${text}`,
+    explain: `请解释以下网页选中文本的含义，提炼重点，并在必要时补充背景。\n\n${text}`,
+    add_to_chat: `请基于以下网页选中文本继续对话。\n\n${text}`,
   };
 
   return prompts[payload.action];
@@ -65,7 +65,6 @@ const handleSelectionAction = async (payload: SelectionActionPayload) => {
 
   handledSelectionActionId.value = payload.id;
   const goal = createSelectionGoal(payload);
-  composerGoal.value = goal;
 
   await chrome.storage.local.remove(PENDING_SELECTION_ACTION_STORAGE_KEY);
 
@@ -73,6 +72,7 @@ const handleSelectionAction = async (payload: SelectionActionPayload) => {
   pageContext.applySelectionAction(payload);
 
   if (payload.action === "add_to_chat") {
+    composerGoal.value = goal;
     return;
   }
 

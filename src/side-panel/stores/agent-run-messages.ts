@@ -119,6 +119,17 @@ export const appendTextDelta = (
   message.streaming = !done;
 };
 
+export const appendAnswerDelta = (
+  state: Pick<AgentRunMessageState, "messages">,
+  event: AgentRunEvent & { type: "message_delta" },
+) => {
+  if (event.channel && event.channel !== "answer") {
+    return;
+  }
+
+  appendTextDelta(state, event.messageId, event.text, event.done, "text");
+};
+
 export const finishStreamingMessages = (
   state: Pick<AgentRunMessageState, "messages">,
 ) => {
@@ -167,13 +178,7 @@ export const applyAgentRunEvent = (
   }
 
   if (event.type === "message_delta") {
-    appendTextDelta(
-      state,
-      event.messageId,
-      event.text,
-      event.done,
-      event.channel === "answer" ? "text" : "thinking",
-    );
+    appendAnswerDelta(state, event);
   }
 
   if (event.type === "plan") {
@@ -181,12 +186,6 @@ export const applyAgentRunEvent = (
     if (state.run) {
       state.run.plan = event.plan;
     }
-    pushMessage(state, {
-      role: "assistant",
-      kind: "plan",
-      content: formatPlan(event.plan),
-      plan: event.plan,
-    });
   }
 
   if (event.type === "action_request") {
