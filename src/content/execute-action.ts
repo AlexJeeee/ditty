@@ -59,6 +59,35 @@ const resolveTarget = (action: AgentAction) => {
   return getRegisteredElement(elementId);
 };
 
+const isDisabledElement = (element: Element) => {
+  if (
+    element instanceof HTMLButtonElement ||
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLSelectElement ||
+    element instanceof HTMLTextAreaElement
+  ) {
+    return element.disabled;
+  }
+
+  return element.getAttribute("aria-disabled") === "true";
+};
+
+const clickElement = (element: Element) => {
+  const htmlElement = element as HTMLElement;
+
+  htmlElement.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+    inline: "center",
+  });
+
+  if (typeof htmlElement.focus === "function") {
+    htmlElement.focus({ preventScroll: true });
+  }
+
+  htmlElement.click();
+};
+
 export const executeAction = async (
   action: AgentAction,
 ): Promise<AgentActionResult> => {
@@ -102,6 +131,14 @@ export const executeAction = async (
     return createResult(action, "failed", "目标元素已失效或不可见。");
   }
 
+  if (isDisabledElement(element)) {
+    return createResult(
+      action,
+      "failed",
+      "目标元素处于禁用状态，无法点击或填写。",
+    );
+  }
+
   const detectedRisk = detectRiskLevel(element);
   if (detectedRisk === "high" || isSensitiveField(element)) {
     return createResult(
@@ -118,7 +155,7 @@ export const executeAction = async (
   }
 
   if (action.toolName === "click_element") {
-    (element as HTMLElement).click();
+    clickElement(element);
     return createResult(action, "succeeded", "已点击目标元素。");
   }
 

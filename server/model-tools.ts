@@ -32,6 +32,12 @@ interface OpenUrlToolArguments {
   label?: string;
 }
 
+interface ClickElementToolArguments {
+  element_id: string;
+  description?: string;
+  reason?: string;
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 };
@@ -92,6 +98,54 @@ const createOpenUrlActionFromArguments = (
   return createOpenUrlAction(args);
 };
 
+const parseClickElementArguments = (
+  value: unknown,
+): ClickElementToolArguments | null => {
+  if (!isRecord(value) || typeof value.element_id !== "string") {
+    return null;
+  }
+
+  const elementId = value.element_id.trim();
+  if (!elementId) {
+    return null;
+  }
+
+  return {
+    element_id: elementId,
+    description:
+      typeof value.description === "string" ? value.description : undefined,
+    reason: typeof value.reason === "string" ? value.reason : undefined,
+  };
+};
+
+const createClickElementActionFromArguments = (
+  value: unknown,
+): PendingToolActionResult => {
+  const args = parseClickElementArguments(value);
+
+  if (!args) {
+    return {
+      blockedReason: "模型请求 click_element，但参数格式未通过校验。",
+    };
+  }
+
+  const description = args.description?.trim() || args.element_id;
+  const reason = args.reason?.trim() || `点击页面元素：${description}`;
+
+  return {
+    action: {
+      toolName: "click_element",
+      riskLevel: "medium",
+      requiresConfirmation: true,
+      target: {
+        elementId: args.element_id,
+        description,
+      },
+      reason,
+    },
+  };
+};
+
 const MODEL_TOOL_DEFINITIONS: ModelToolDefinition[] = [
   {
     toolName: "open_url",
@@ -131,6 +185,44 @@ const MODEL_TOOL_DEFINITIONS: ModelToolDefinition[] = [
         "如果任务需要打开一个确定的 http/https 页面，模型会生成 open_url 动作，执行前仍需用户确认。",
     },
     createActionFromArguments: createOpenUrlActionFromArguments,
+  },
+  {
+    toolName: "click_element",
+    chatTool: {
+      type: "function",
+      function: {
+        name: "click_element",
+        description:
+          "请求 Chrome 扩展在用户确认后点击当前页面上下文里采集到的可交互 DOM 元素。只能使用可交互元素摘要中明确给出的 element_id，不要猜测或编造。",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            element_id: {
+              type: "string",
+              description: "页面上下文可交互元素摘要中的 id，例如 el_1_ab123。",
+            },
+            description: {
+              type: "string",
+              description: "目标元素的人类可读描述，例如按钮文案。",
+            },
+            reason: {
+              type: "string",
+              description: "向用户说明为什么需要点击这个元素。",
+            },
+          },
+          required: ["element_id", "description", "reason"],
+        },
+      },
+    },
+    planStep: {
+      toolName: "click_element",
+      riskLevel: "medium",
+      requiresConfirmation: true,
+      reason:
+        "如果任务需要点击当前网页中的明确 DOM 元素，模型会生成 click_element 动作，执行前仍需用户确认。",
+    },
+    createActionFromArguments: createClickElementActionFromArguments,
   },
 ];
 
