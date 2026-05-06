@@ -229,13 +229,12 @@ textarea:focus {
   display: grid;
   min-height: 0;
   flex: 1;
-  grid-template-columns: minmax(156px, 0.36fr) minmax(0, 1fr);
-  gap: 12px;
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 
 .chat-main,
-.chat-history {
+.history-page {
   display: grid;
   min-height: 0;
 }
@@ -245,14 +244,13 @@ textarea:focus {
   gap: 12px;
 }
 
-.chat-history {
+.history-page {
   grid-template-rows: auto auto minmax(0, 1fr);
-  border-right: 1px solid #e5eaf2;
-  padding-right: 12px;
+  gap: 12px;
 }
 
 .chat-header,
-.history-header,
+.history-page-header,
 .message-meta,
 .action-card-top,
 .chat-composer {
@@ -269,11 +267,69 @@ textarea:focus {
   line-height: 1.25;
 }
 
-.history-header h2 {
+.history-page-header {
+  justify-content: flex-start;
+}
+
+.history-page-header h2 {
   margin: 0;
   color: #101827;
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.25;
+}
+
+.chat-header-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.history-entry-button {
+  display: inline-grid;
+  width: 38px;
+  min-width: 38px;
+  place-items: center;
+  padding: 0;
+}
+
+.history-entry-icon {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+}
+
+.history-entry-icon::before,
+.history-entry-icon::after {
+  position: absolute;
+  background: currentColor;
+  content: "";
+  transform-origin: left center;
+}
+
+.history-entry-icon::before {
+  top: 6px;
+  left: 6px;
+  width: 5px;
+  height: 2px;
+}
+
+.history-entry-icon::after {
+  top: 3px;
+  left: 6px;
+  width: 2px;
+  height: 6px;
+}
+
+.history-back-button {
+  display: inline-grid;
+  width: 38px;
+  min-width: 38px;
+  place-items: center;
+  padding: 0;
+  font-size: 24px;
+  line-height: 1;
 }
 
 .history-list {
@@ -726,32 +782,4 @@ textarea:focus {
   background: currentColor;
   content: "";
   transform: translateX(-50%);
-}
-
-@media (max-width: 520px) {
-  .chat-panel {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .chat-history {
-    grid-template-rows: auto auto auto;
-    border-right: 0;
-    border-bottom: 1px solid #e5eaf2;
-    padding-right: 0;
-    padding-bottom: 12px;
-  }
-
-  .history-list {
-    min-height: 0;
-    max-height: 118px;
-    flex-direction: row;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: 2px;
-  }
-
-  .history-item {
-    min-width: 168px;
-  }
 }

@@ -15,6 +15,7 @@ const emit = defineEmits<{
 
 const agentRun = useAgentRunStore();
 const logRef = ref<HTMLElement | null>(null);
+const currentView = ref<"chat" | "history">("chat");
 const historyStatus = computed(() => {
   if (agentRun.historyLoading) {
     return "加载中";
@@ -66,12 +67,24 @@ const formatSessionTime = (value: string) => {
 };
 
 const selectSession = (sessionId: string) => {
-  void agentRun.selectChatSession(sessionId);
+  void agentRun.selectChatSession(sessionId).then(() => {
+    currentView.value = "chat";
+  });
 };
 
 const removeSession = (sessionId: string, event: MouseEvent) => {
   event.stopPropagation();
   void agentRun.removeChatSession(sessionId);
+};
+
+const openHistory = () => {
+  currentView.value = "history";
+  void agentRun.loadChatSessions();
+};
+
+const startNewChat = () => {
+  currentView.value = "chat";
+  void agentRun.startNewChat();
 };
 
 watch(
@@ -93,20 +106,21 @@ onMounted(() => {
 
 <template>
   <section class="panel-block chat-panel">
-    <aside class="chat-history">
-      <div class="history-header">
+    <div v-if="currentView === 'history'" class="history-page">
+      <div class="history-page-header">
+        <button
+          class="icon-button history-back-button"
+          type="button"
+          title="返回聊天"
+          aria-label="返回聊天"
+          @click="currentView = 'chat'"
+        >
+          <span aria-hidden="true">‹</span>
+        </button>
         <div>
           <p class="eyebrow">History</p>
           <h2>{{ historyStatus }}</h2>
         </div>
-        <button
-          class="icon-button"
-          type="button"
-          title="新建对话"
-          @click="agentRun.startNewChat"
-        >
-          新建
-        </button>
       </div>
       <p v-if="agentRun.historyError" class="error-text">
         {{ agentRun.historyError }}
@@ -149,23 +163,34 @@ onMounted(() => {
           暂无历史
         </p>
       </div>
-    </aside>
+    </div>
 
-    <div class="chat-main">
+    <div v-else class="chat-main">
       <div class="chat-header">
         <div>
           <p class="eyebrow">Chat</p>
           <h2>{{ agentRun.statusLabel }}</h2>
         </div>
-        <button
-          class="icon-button"
-          type="button"
-          title="新建对话"
-          :disabled="agentRun.loading"
-          @click="agentRun.startNewChat"
-        >
-          新建
-        </button>
+        <div class="chat-header-actions">
+          <button
+            class="icon-button history-entry-button"
+            type="button"
+            title="历史记录"
+            aria-label="历史记录"
+            @click="openHistory"
+          >
+            <span class="history-entry-icon" aria-hidden="true" />
+          </button>
+          <button
+            class="icon-button"
+            type="button"
+            title="新建对话"
+            :disabled="agentRun.loading"
+            @click="startNewChat"
+          >
+            新建
+          </button>
+        </div>
       </div>
 
       <div ref="logRef" class="chat-log" aria-live="polite">
