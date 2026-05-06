@@ -1,38 +1,14 @@
 import { createScopedId } from "@/shared/id";
 import type {
+  ActionMessageStatus,
   AgentAction,
   AgentActionResult,
   AgentPlan,
   AgentRun,
   AgentRunEvent,
+  ChatMessage,
+  ChatMessageKind,
 } from "@/shared/types";
-
-export type ChatRole = "user" | "assistant" | "system";
-export type ChatMessageKind =
-  | "text"
-  | "thinking"
-  | "plan"
-  | "action_confirmation"
-  | "result"
-  | "error";
-export type ActionMessageStatus =
-  | "pending"
-  | "executing"
-  | "confirmed"
-  | "rejected";
-
-export interface ChatMessage {
-  id: string;
-  role: ChatRole;
-  kind: ChatMessageKind;
-  content: string;
-  createdAt: string;
-  streaming?: boolean;
-  plan?: AgentPlan;
-  action?: AgentAction;
-  actionStatus?: ActionMessageStatus;
-  result?: AgentActionResult;
-}
 
 export interface AgentRunMessageState {
   run: AgentRun | null;

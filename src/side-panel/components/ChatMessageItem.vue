@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { renderMarkdown, splitThinkSections } from "@/shared/markdown";
-import type { ChatMessage } from "../stores/agent-run-messages";
+import type { ChatMessage } from "@/shared/types";
 
 const props = defineProps<{
   message: ChatMessage;
@@ -42,23 +42,28 @@ const actionStatusText = computed(() => {
     pending: "等待确认",
     executing: "执行中",
     confirmed: "已执行",
-    rejected: "已跳过"
+    rejected: "已跳过",
   };
 
-  return props.message.actionStatus ? statusMap[props.message.actionStatus] : "等待确认";
+  return props.message.actionStatus
+    ? statusMap[props.message.actionStatus]
+    : "等待确认";
 });
 
 const sections = computed(() =>
   splitThinkSections(props.message.content).map((section, index) => ({
     ...section,
     id: `${props.message.id}_${index}`,
-    html: renderMarkdown(section.content)
-  }))
+    html: renderMarkdown(section.content),
+  })),
 );
 </script>
 
 <template>
-  <article class="chat-message" :class="[`message-${message.role}`, `message-${message.kind}`]">
+  <article
+    class="chat-message"
+    :class="[`message-${message.role}`, `message-${message.kind}`]"
+  >
     <div class="message-meta">
       <span>{{ label }}</span>
       <span v-if="message.streaming" class="typing-dot">流式输出中</span>
@@ -80,7 +85,9 @@ const sections = computed(() =>
         <div v-if="message.plan.blockedActions.length" class="blocked-actions">
           <strong>已阻断的高风险动作</strong>
           <p v-for="action in message.plan.blockedActions" :key="action.id">
-            {{ action.target?.description ?? action.toolName }}：{{ action.reason }}
+            {{ action.target?.description ?? action.toolName }}：{{
+              action.reason
+            }}
           </p>
         </div>
       </details>
@@ -96,16 +103,22 @@ const sections = computed(() =>
       </details>
     </template>
 
-    <template v-else-if="message.kind === 'action_confirmation' && message.action">
+    <template
+      v-else-if="message.kind === 'action_confirmation' && message.action"
+    >
       <div class="action-card-inline">
         <div class="action-card-top">
           <div>
             <strong>{{ message.action.toolName }}</strong>
             <p>{{ message.content }}</p>
           </div>
-          <span class="risk" :class="`risk-${message.action.riskLevel}`">{{ message.action.riskLevel }}</span>
+          <span class="risk" :class="`risk-${message.action.riskLevel}`">{{
+            message.action.riskLevel
+          }}</span>
         </div>
-        <p v-if="message.action.target" class="muted">目标：{{ message.action.target.description }}</p>
+        <p v-if="message.action.target" class="muted">
+          目标：{{ message.action.target.description }}
+        </p>
         <div v-if="message.action.requiresConfirmation" class="button-row">
           <button
             class="primary-button"
@@ -131,7 +144,11 @@ const sections = computed(() =>
 
     <template v-else>
       <template v-for="section in sections" :key="section.id">
-        <details v-if="section.type === 'think'" class="collapsible-message think-section" :open="message.streaming">
+        <details
+          v-if="section.type === 'think'"
+          class="collapsible-message think-section"
+          :open="message.streaming"
+        >
           <summary>
             <span>{{ message.streaming ? "正在思考" : "查看思考过程" }}</span>
             <small>{{ section.content.length }} 字</small>

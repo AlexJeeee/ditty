@@ -20,6 +20,7 @@ const composerGoal = ref("");
 const handledSelectionActionId = ref("");
 
 onMounted(() => {
+  agentRun.loadChatSessions();
   pageContext.refresh();
   consumePendingSelectionAction();
   chrome.runtime.onMessage.addListener(handleRuntimeMessage);
@@ -48,7 +49,6 @@ const start = async (
 
 const createSelectionGoal = (payload: SelectionActionPayload) => {
   const text = payload.selectedText.trim();
-  const source = payload.pageTitle || payload.pageUrl;
   const prompts: Record<SelectionMenuAction, string> = {
     translate: `请将以下网页选中文本翻译成自然、准确的中文，并保留关键信息。\n\n${text}`,
     explain: `请解释以下网页选中文本的含义，提炼重点，并在必要时补充背景。\n\n${text}`,

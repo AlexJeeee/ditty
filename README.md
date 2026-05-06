@@ -72,6 +72,7 @@ OPENAI_TIMEOUT_MS=120000
 OPENAI_MAX_RETRIES=1
 OPENAI_BASE_URL=https://api.minimaxi.com/v1
 AI_AGENT_PORT=8787
+AI_AGENT_DB_PATH=server/.data/chat-history.sqlite
 VITE_AGENT_API_BASE_URL=http://127.0.0.1:8787
 ```
 
@@ -91,6 +92,7 @@ pnpm server:dev
 ```
 
 扩展开发服务器固定使用 `localhost:5173`，本地 AI 代理默认使用 `http://127.0.0.1:8787`。保持命令运行，CRXJS 会维护开发态 `dist` 产物并提供 HMR / reload 能力。
+聊天历史默认保存在 `server/.data/chat-history.sqlite`，可通过 `AI_AGENT_DB_PATH` 指向其他本地 SQLite 文件。
 
 ### 3. 加载 Chrome 插件
 

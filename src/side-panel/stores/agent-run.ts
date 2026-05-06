@@ -2,9 +2,14 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import {
   createAgentRun,
+  deleteChatSession,
+  getChatSession,
+  listChatSessions,
+  saveChatSession,
   stopAgentRun,
   streamAgentRun,
 } from "@/shared/api-client";
+import { createScopedId } from "@/shared/id";
 import type {
   ActionExecutionResponse,
   PageContextResponse,
@@ -15,6 +20,8 @@ import type {
   AgentPlan,
   AgentRun,
   AgentRunEvent,
+  ChatSessionSnapshot,
+  ChatSessionSummary,
   ExtensionError,
   ModelConversationMessage,
   PageContext,
@@ -29,12 +36,21 @@ import {
   updateActionMessage,
   type AgentRunMessageState,
 } from "./agent-run-messages";
+import {
+  createChatSessionTitle,
+  createLastMessagePreview,
+  sanitizeMessagesForHydration,
+  sanitizeMessagesForPersistence,
+  sanitizeSnapshotForHydration,
+} from "./chat-session-snapshot";
 
 const delay = (ms: number) =>
   new Promise((resolve) => window.setTimeout(resolve, ms));
 const CONTINUATION_CONTEXT_RETRY_DELAYS = [300, 1000, 1800];
+const CHAT_SAVE_DEBOUNCE_MS = 500;
 
 export const useAgentRunStore = defineStore("agent-run", () => {
+  let persistTimer: number | null = null;
   const run = ref<AgentRun | null>(null);
   const plan = ref<AgentPlan | null>(null);
   const events = ref<AgentRunEvent[]>([]);
@@ -43,6 +59,11 @@ export const useAgentRunStore = defineStore("agent-run", () => {
   const messages = ref([createWelcomeMessage()]);
   const modelConversation = ref<ModelConversationMessage[]>([]);
   const currentPageContext = ref<PageContext | null>(null);
+  const activeSessionId = ref<string | null>(null);
+  const chatSessions = ref<ChatSessionSummary[]>([]);
+  const historyLoading = ref(false);
+  const historySaving = ref(false);
+  const historyError = ref<string | null>(null);
   const loading = ref(false);
   const stopping = ref(false);
   const stopRequested = ref(false);
@@ -57,13 +78,120 @@ export const useAgentRunStore = defineStore("agent-run", () => {
   );
   const statusLabel = computed(() => run.value?.status ?? "idle");
 
-  const reset = () => {
+  const clearPersistTimer = () => {
+    if (persistTimer !== null) {
+      window.clearTimeout(persistTimer);
+      persistTimer = null;
+    }
+  };
+
+  const createSessionSummary = (
+    snapshot: ChatSessionSnapshot,
+  ): ChatSessionSummary => ({
+    id: snapshot.id,
+    title: snapshot.title,
+    pageUrl: snapshot.pageUrl,
+    pageTitle: snapshot.pageTitle,
+    lastMessagePreview: snapshot.lastMessagePreview,
+    messageCount: snapshot.messages.length,
+    createdAt: snapshot.createdAt,
+    updatedAt: snapshot.updatedAt,
+  });
+
+  const upsertSessionSummary = (snapshot: ChatSessionSnapshot) => {
+    const summary = createSessionSummary(snapshot);
+    chatSessions.value = [
+      summary,
+      ...chatSessions.value.filter((session) => session.id !== summary.id),
+    ].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  };
+
+  const ensureActiveSession = () => {
+    activeSessionId.value ??= createScopedId("chat", 6);
+    return activeSessionId.value;
+  };
+
+  const buildSnapshot = (): ChatSessionSnapshot | null => {
+    const persistedMessages = sanitizeMessagesForPersistence(messages.value);
+
+    if (!persistedMessages.length) {
+      return null;
+    }
+
+    const sessionId = ensureActiveSession();
+    const existingSession = chatSessions.value.find(
+      (session) => session.id === sessionId,
+    );
+    const now = new Date().toISOString();
+    const pageUrl = run.value?.pageUrl ?? currentPageContext.value?.url ?? "";
+    const pageTitle =
+      run.value?.pageTitle ?? currentPageContext.value?.title ?? "";
+
+    return {
+      id: sessionId,
+      title: createChatSessionTitle(
+        persistedMessages,
+        run.value?.goal || pageTitle || "新对话",
+      ),
+      pageUrl,
+      pageTitle,
+      lastMessagePreview: createLastMessagePreview(persistedMessages),
+      createdAt:
+        existingSession?.createdAt ??
+        run.value?.createdAt ??
+        messages.value[0]?.createdAt ??
+        now,
+      updatedAt: now,
+      run: run.value,
+      plan: plan.value,
+      events: events.value,
+      pendingAction: pendingAction.value,
+      results: results.value,
+      messages: persistedMessages,
+      modelConversation: modelConversation.value,
+    };
+  };
+
+  const persistActiveSession = async () => {
+    const snapshot = buildSnapshot();
+
+    if (!snapshot) {
+      return;
+    }
+
+    historySaving.value = true;
+    historyError.value = null;
+
+    try {
+      const savedSnapshot = await saveChatSession(snapshot);
+      upsertSessionSummary(savedSnapshot);
+    } catch (caught) {
+      historyError.value =
+        caught instanceof Error ? caught.message : "历史聊天保存失败。";
+    } finally {
+      historySaving.value = false;
+    }
+  };
+
+  const schedulePersist = () => {
+    if (!sanitizeMessagesForPersistence(messages.value).length) {
+      return;
+    }
+
+    clearPersistTimer();
+    persistTimer = window.setTimeout(() => {
+      persistTimer = null;
+      void persistActiveSession();
+    }, CHAT_SAVE_DEBOUNCE_MS);
+  };
+
+  const resetRuntimeState = () => {
     run.value = null;
     plan.value = null;
     events.value = [];
     pendingAction.value = null;
     results.value = [];
-    messages.value = [];
+    messages.value = [createWelcomeMessage()];
     modelConversation.value = [];
     currentPageContext.value = null;
     error.value = null;
@@ -73,6 +201,99 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     activeAbortController.value?.abort();
     activeAbortController.value = null;
     loading.value = false;
+  };
+
+  const startNewChat = async () => {
+    clearPersistTimer();
+    await persistActiveSession();
+    activeSessionId.value = null;
+    resetRuntimeState();
+  };
+
+  const reset = () => {
+    void startNewChat();
+  };
+
+  const loadChatSessions = async () => {
+    historyLoading.value = true;
+    historyError.value = null;
+
+    try {
+      chatSessions.value = await listChatSessions();
+    } catch (caught) {
+      historyError.value =
+        caught instanceof Error ? caught.message : "历史聊天读取失败。";
+    } finally {
+      historyLoading.value = false;
+    }
+  };
+
+  const hydrateFromSnapshot = (snapshotValue: ChatSessionSnapshot) => {
+    const snapshot = sanitizeSnapshotForHydration(snapshotValue);
+
+    clearPersistTimer();
+    activeAbortController.value?.abort();
+    activeAbortController.value = null;
+    loading.value = false;
+    stopping.value = false;
+    stopRequested.value = false;
+    silentStopRequested.value = true;
+    activeSessionId.value = snapshot.id;
+    run.value = snapshot.run;
+    plan.value = snapshot.plan;
+    events.value = snapshot.events;
+    pendingAction.value = snapshot.pendingAction;
+    results.value = snapshot.results;
+    messages.value = snapshot.messages.length
+      ? sanitizeMessagesForHydration(snapshot.messages)
+      : [createWelcomeMessage()];
+    modelConversation.value = snapshot.modelConversation;
+    currentPageContext.value = null;
+    error.value = null;
+    upsertSessionSummary(snapshot);
+  };
+
+  const selectChatSession = async (sessionId: string) => {
+    if (sessionId === activeSessionId.value) {
+      return;
+    }
+
+    clearPersistTimer();
+    await persistActiveSession();
+    historyLoading.value = true;
+    historyError.value = null;
+
+    try {
+      hydrateFromSnapshot(await getChatSession(sessionId));
+    } catch (caught) {
+      historyError.value =
+        caught instanceof Error ? caught.message : "历史聊天读取失败。";
+    } finally {
+      historyLoading.value = false;
+    }
+  };
+
+  const removeChatSession = async (sessionId: string) => {
+    if (activeSessionId.value === sessionId) {
+      clearPersistTimer();
+    }
+
+    historyError.value = null;
+
+    try {
+      await deleteChatSession(sessionId);
+      chatSessions.value = chatSessions.value.filter(
+        (session) => session.id !== sessionId,
+      );
+
+      if (activeSessionId.value === sessionId) {
+        activeSessionId.value = null;
+        resetRuntimeState();
+      }
+    } catch (caught) {
+      historyError.value =
+        caught instanceof Error ? caught.message : "历史聊天删除失败。";
+    }
   };
 
   const streamLocalAssistantText = async (text: string) => {
@@ -91,6 +312,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     }
 
     appendTextDelta({ messages: messages.value }, messageId, "", true, "text");
+    schedulePersist();
   };
 
   const isAbortError = (caught: unknown) => {
@@ -111,6 +333,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
         status: "stopped",
       });
     }
+    schedulePersist();
   };
 
   const applyEvent = async (event: AgentRunEvent) => {
@@ -140,6 +363,8 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     if (result.autoAction) {
       await executeAction(result.autoAction);
     }
+
+    schedulePersist();
   };
 
   const consumeRunStream = async (
@@ -253,6 +478,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
               content: "已终止当前回答。",
             },
           );
+          schedulePersist();
         }
         return;
       }
@@ -271,6 +497,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
           content: error.value.message,
         },
       );
+      schedulePersist();
     } finally {
       if (activeAbortController.value === abortController) {
         activeAbortController.value = null;
@@ -303,6 +530,8 @@ export const useAgentRunStore = defineStore("agent-run", () => {
         content: goal,
       },
     );
+    ensureActiveSession();
+    schedulePersist();
 
     try {
       run.value = await createAgentRun(
@@ -315,6 +544,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
       );
 
       await consumeRunStream(pageContext, abortController);
+      schedulePersist();
     } catch (caught) {
       if (stopRequested.value || isAbortError(caught)) {
         if (!silentStopRequested.value) {
@@ -327,6 +557,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
               content: "已终止当前回答。",
             },
           );
+          schedulePersist();
         }
         return;
       }
@@ -344,6 +575,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
           content: error.value.message,
         },
       );
+      schedulePersist();
     } finally {
       if (activeAbortController.value === abortController) {
         activeAbortController.value = null;
@@ -403,6 +635,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
             error: response.error,
           };
       appendToolConversationMessage(action, result);
+      schedulePersist();
 
       if (pendingAction.value?.id === action.id) {
         pendingAction.value = null;
@@ -461,6 +694,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
 
     updateActionMessage({ messages: messages.value }, action.id, "rejected");
     appendToolConversationMessage(action, result);
+    schedulePersist();
     pendingAction.value = null;
     applyEvent({ type: "action_result", runId: run.value.id, result });
 
@@ -510,6 +744,11 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     results,
     messages,
     modelConversation,
+    activeSessionId,
+    chatSessions,
+    historyLoading,
+    historySaving,
+    historyError,
     loading,
     stopping,
     error,
@@ -521,6 +760,12 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     stop,
     executePendingAction,
     rejectPendingAction,
+    loadChatSessions,
+    selectChatSession,
+    removeChatSession,
+    startNewChat,
+    hydrateFromSnapshot,
+    buildSnapshot,
     reset,
   };
 });

@@ -1,6 +1,8 @@
 import type {
   AgentRun,
   AgentRunEvent,
+  ChatSessionSnapshot,
+  ChatSessionSummary,
   ModelConversationMessage,
   PageContext,
 } from "./types";
@@ -107,6 +109,11 @@ interface StopAgentRunResponse {
   status: AgentRun["status"];
 }
 
+interface DeleteChatSessionResponse {
+  ok: boolean;
+  deleted: boolean;
+}
+
 export const createAgentRun = async (
   goal: string,
   pageContext: PageContext,
@@ -184,5 +191,57 @@ export const stopAgentRun = async (
   return parseJsonResponse<StopAgentRunResponse>(
     response,
     "Agent Run 停止失败。",
+  );
+};
+
+export const listChatSessions = async (): Promise<ChatSessionSummary[]> => {
+  const response = await fetch(`${getApiBaseUrl()}/api/chat/sessions`);
+
+  return parseJsonResponse<ChatSessionSummary[]>(
+    response,
+    "历史聊天读取失败。",
+  );
+};
+
+export const getChatSession = async (
+  sessionId: string,
+): Promise<ChatSessionSnapshot> => {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/chat/sessions/${encodeURIComponent(sessionId)}`,
+  );
+
+  return parseJsonResponse<ChatSessionSnapshot>(response, "历史聊天读取失败。");
+};
+
+export const saveChatSession = async (
+  snapshot: ChatSessionSnapshot,
+): Promise<ChatSessionSnapshot> => {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/chat/sessions/${encodeURIComponent(snapshot.id)}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ snapshot }),
+    },
+  );
+
+  return parseJsonResponse<ChatSessionSnapshot>(response, "历史聊天保存失败。");
+};
+
+export const deleteChatSession = async (
+  sessionId: string,
+): Promise<DeleteChatSessionResponse> => {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/chat/sessions/${encodeURIComponent(sessionId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+
+  return parseJsonResponse<DeleteChatSessionResponse>(
+    response,
+    "历史聊天删除失败。",
   );
 };

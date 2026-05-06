@@ -31,6 +31,20 @@ export type AgentToolName =
   | "open_url"
   | "copy_result";
 
+export type ChatRole = "user" | "assistant" | "system";
+export type ChatMessageKind =
+  | "text"
+  | "thinking"
+  | "plan"
+  | "action_confirmation"
+  | "result"
+  | "error";
+export type ActionMessageStatus =
+  | "pending"
+  | "executing"
+  | "confirmed"
+  | "rejected";
+
 export interface PageHeading {
   level: number;
   text: string;
@@ -119,6 +133,24 @@ export interface AgentActionResult {
   error?: ExtensionError;
 }
 
+export interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  kind: ChatMessageKind;
+  content: string;
+  createdAt: string;
+  streaming?: boolean;
+  plan?: AgentPlan;
+  action?: AgentAction;
+  actionStatus?: ActionMessageStatus;
+  result?: AgentActionResult;
+}
+
+export interface PersistedChatMessage extends ChatMessage {
+  sessionId: string;
+  order: number;
+}
+
 export interface ModelToolCall {
   id: string;
   type: "function";
@@ -179,4 +211,32 @@ export interface ExtensionError {
   message: string;
   retryable: boolean;
   details?: Record<string, unknown>;
+}
+
+export interface ChatSessionSummary {
+  id: string;
+  title: string;
+  pageUrl: string;
+  pageTitle: string;
+  lastMessagePreview: string;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatSessionSnapshot {
+  id: string;
+  title: string;
+  pageUrl: string;
+  pageTitle: string;
+  lastMessagePreview: string;
+  createdAt: string;
+  updatedAt: string;
+  run: AgentRun | null;
+  plan: AgentPlan | null;
+  events: AgentRunEvent[];
+  pendingAction: AgentAction | null;
+  results: AgentActionResult[];
+  messages: ChatMessage[];
+  modelConversation: ModelConversationMessage[];
 }

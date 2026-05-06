@@ -20,6 +20,7 @@ import {
   validatePageContext,
   type StoredRun,
 } from "./run-store";
+import { getChatHistoryStore } from "./chat-history-store";
 import {
   toErrorEvent,
   writeAssistantDone,
@@ -29,6 +30,7 @@ import {
 import { createScopedId } from "../src/shared/id";
 import type {
   AgentRun,
+  ChatSessionSnapshot,
   ModelConversationMessage,
   ModelToolCall,
   PageContext,
@@ -45,6 +47,10 @@ interface CreateAgentRunBody {
 interface StreamAgentRunBody {
   pageContext?: PageContext;
   conversation?: ModelConversationMessage[];
+}
+
+interface UpsertChatSessionBody {
+  snapshot?: ChatSessionSnapshot;
 }
 
 const MAX_HISTORY_MESSAGES = 40;
@@ -207,10 +213,9 @@ const ensureToolCallIds = (toolCalls: ToolCallAccumulator[]) => {
 const streamOpenAICompletion = async (
   raw: ServerResponse,
   stored: StoredRun,
-  pageContext: PageContext,
   abortController: AbortController,
 ): Promise<void> => {
-  const { run, goal } = stored;
+  const { run } = stored;
   const model = getModel();
   const messageId = createScopedId("openai");
   const openai = requireOpenAIClient();
@@ -336,6 +341,8 @@ const streamOpenAICompletion = async (
 };
 
 export const registerAgentRoutes = (fastify: FastifyInstance) => {
+  const chatHistoryStore = getChatHistoryStore();
+
   fastify.get("/health", async () => ({
     ok: true,
     model: getModel(),
@@ -365,6 +372,59 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
       });
     }
   });
+
+  fastify.get("/api/chat/sessions", async () => {
+    return chatHistoryStore.listSessions();
+  });
+
+  fastify.get<{ Params: { sessionId: string } }>(
+    "/api/chat/sessions/:sessionId",
+    async (request, reply) => {
+      const snapshot = chatHistoryStore.getSession(request.params.sessionId);
+
+      if (!snapshot) {
+        return reply.code(404).send({
+          error: {
+            message: "聊天会话不存在。",
+          },
+        });
+      }
+
+      return snapshot;
+    },
+  );
+
+  fastify.put<{
+    Params: { sessionId: string };
+    Body: UpsertChatSessionBody;
+  }>("/api/chat/sessions/:sessionId", async (request, reply) => {
+    const snapshot = request.body?.snapshot;
+
+    if (!snapshot || typeof snapshot !== "object") {
+      return reply.code(400).send({
+        error: {
+          message: "聊天快照缺失。",
+        },
+      });
+    }
+
+    return chatHistoryStore.upsertSession({
+      ...snapshot,
+      id: request.params.sessionId,
+    });
+  });
+
+  fastify.delete<{ Params: { sessionId: string } }>(
+    "/api/chat/sessions/:sessionId",
+    async (request) => {
+      const deleted = chatHistoryStore.deleteSession(request.params.sessionId);
+
+      return {
+        ok: true,
+        deleted,
+      };
+    },
+  );
 
   fastify.post<{ Body: CreateAgentRunBody }>(
     "/api/agent/runs",
@@ -518,12 +578,7 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
       });
 
       try {
-        await streamOpenAICompletion(
-          reply.raw,
-          stored,
-          pageContext,
-          abortController,
-        );
+        await streamOpenAICompletion(reply.raw, stored, abortController);
       } catch (error) {
         if (abortController.signal.aborted) {
           setRunStatus(stored, "stopped");

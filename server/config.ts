@@ -1,9 +1,11 @@
 import OpenAI from "openai";
+import path from "node:path";
 
 const DEFAULT_MODEL = "gpt-5.2";
 const DEFAULT_PORT = 8787;
 const DEFAULT_OPENAI_TIMEOUT_MS = 120_000;
 const DEFAULT_OPENAI_MAX_RETRIES = 1;
+const DEFAULT_DB_PATH = path.resolve("server/.data/chat-history.sqlite");
 
 export const getPort = () => {
   const parsed = Number(process.env.AI_AGENT_PORT ?? DEFAULT_PORT);
@@ -34,6 +36,10 @@ export const getOpenAIMaxRetries = () => {
 
 export const getOpenAIBaseUrl = () => {
   return process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+};
+
+export const getDatabasePath = () => {
+  return path.resolve(process.env.AI_AGENT_DB_PATH || DEFAULT_DB_PATH);
 };
 
 let _openaiClient: OpenAI | null = null;
