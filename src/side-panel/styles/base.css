@@ -472,7 +472,8 @@ textarea:focus {
 }
 
 .markdown-body {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -506,7 +507,8 @@ textarea:focus {
 
 .markdown-body ul,
 .markdown-body ol {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 4px;
   padding-left: 18px;
 }
@@ -541,7 +543,8 @@ textarea:focus {
 }
 
 .collapsible-message {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
@@ -598,7 +601,8 @@ textarea:focus {
 }
 
 .plan-steps {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   margin: 8px 0 0;
   padding-left: 20px;
@@ -627,7 +631,8 @@ textarea:focus {
 }
 
 .action-card-inline {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
