@@ -45,12 +45,67 @@ const createTestApp = () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   for (const tempDir of tempDirs.splice(0)) {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
 describe("agent auth routes", () => {
+  it("returns model provider metadata without leaking provider secrets", async () => {
+    vi.stubEnv(
+      "AI_MODEL_PROVIDERS_JSON",
+      JSON.stringify([
+        {
+          id: "minmax",
+          name: "MiniMax",
+          baseURL: "https://api.minimaxi.com/v1",
+          apiKeyEnv: "MINIMAX_API_KEY",
+          models: [{ id: "MiniMax-M2.7", name: "MiniMax M2.7" }],
+        },
+        {
+          id: "deepseek",
+          name: "DeepSeek",
+          baseURL: "https://api.deepseek.com/v1",
+          apiKeyEnv: "DEEPSEEK_API_KEY",
+          models: [{ id: "deepseek-chat", name: "DeepSeek Chat" }],
+        },
+      ]),
+    );
+    vi.stubEnv("AI_DEFAULT_PROVIDER", "minmax");
+    vi.stubEnv("AI_DEFAULT_MODEL", "MiniMax-M2.7");
+    vi.stubEnv("MINIMAX_API_KEY", "secret-minmax");
+    const { app } = createTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/models",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      defaultRoute: {
+        providerId: "minmax",
+        modelId: "MiniMax-M2.7",
+      },
+      providers: [
+        {
+          id: "minmax",
+          name: "MiniMax",
+          models: [{ id: "MiniMax-M2.7", name: "MiniMax M2.7" }],
+        },
+        {
+          id: "deepseek",
+          name: "DeepSeek",
+          models: [{ id: "deepseek-chat", name: "DeepSeek Chat" }],
+        },
+      ],
+    });
+    expect(response.body).not.toContain("baseURL");
+    expect(response.body).not.toContain("apiKeyEnv");
+    expect(response.body).not.toContain("secret-minmax");
+  });
+
   it("requires authentication before creating an agent run", async () => {
     const { app } = createTestApp();
 
@@ -89,6 +144,96 @@ describe("agent auth routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(authStore.getUserByToken(auth.accessToken)?.quotaRemaining).toBe(99);
+  });
+
+  it("stores the requested model route when creating an agent run", async () => {
+    vi.stubEnv(
+      "AI_MODEL_PROVIDERS_JSON",
+      JSON.stringify([
+        {
+          id: "minmax",
+          name: "MiniMax",
+          baseURL: "https://api.minimaxi.com/v1",
+          apiKeyEnv: "MINIMAX_API_KEY",
+          models: [{ id: "MiniMax-M2.7", name: "MiniMax M2.7" }],
+        },
+        {
+          id: "deepseek",
+          name: "DeepSeek",
+          baseURL: "https://api.deepseek.com/v1",
+          apiKeyEnv: "DEEPSEEK_API_KEY",
+          models: [{ id: "deepseek-chat", name: "DeepSeek Chat" }],
+        },
+      ]),
+    );
+    const { app, authStore, runStore } = createTestApp();
+    const auth = await authStore.register("user@example.com", "password123");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agent/runs",
+      headers: {
+        authorization: `Bearer ${auth.accessToken}`,
+      },
+      payload: {
+        goal: "总结页面",
+        pageContext,
+        modelRoute: {
+          providerId: "deepseek",
+          modelId: "deepseek-chat",
+        },
+      },
+    });
+    const run = response.json() as { id: string };
+
+    expect(response.statusCode).toBe(200);
+    expect(runStore.get(run.id)?.run.modelRoute).toEqual({
+      providerId: "deepseek",
+      modelId: "deepseek-chat",
+    });
+  });
+
+  it("rejects unknown model routes without deducting quota", async () => {
+    vi.stubEnv(
+      "AI_MODEL_PROVIDERS_JSON",
+      JSON.stringify([
+        {
+          id: "minmax",
+          name: "MiniMax",
+          baseURL: "https://api.minimaxi.com/v1",
+          apiKeyEnv: "MINIMAX_API_KEY",
+          models: [{ id: "MiniMax-M2.7", name: "MiniMax M2.7" }],
+        },
+      ]),
+    );
+    const { app, authStore } = createTestApp();
+    const auth = await authStore.register("user@example.com", "password123");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agent/runs",
+      headers: {
+        authorization: `Bearer ${auth.accessToken}`,
+      },
+      payload: {
+        goal: "总结页面",
+        pageContext,
+        modelRoute: {
+          providerId: "deepseek",
+          modelId: "deepseek-chat",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        message: "模型提供商不可用：deepseek。",
+      },
+    });
+    expect(authStore.getUserByToken(auth.accessToken)?.quotaRemaining).toBe(
+      100,
+    );
   });
 
   it("rejects agent runs when quota is exhausted", async () => {

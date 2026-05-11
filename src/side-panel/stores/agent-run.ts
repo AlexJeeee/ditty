@@ -4,6 +4,7 @@ import {
   createAgentRun,
   deleteChatSession,
   getChatSession,
+  listModels,
   listChatSessions,
   saveChatSession,
   stopAgentRun,
@@ -23,6 +24,8 @@ import type {
   ChatSessionSnapshot,
   ChatSessionSummary,
   ExtensionError,
+  ModelProvider,
+  ModelRoute,
   ModelConversationMessage,
   PageContext,
 } from "@/shared/types";
@@ -49,6 +52,7 @@ const delay = (ms: number) =>
   new Promise((resolve) => window.setTimeout(resolve, ms));
 const CONTINUATION_CONTEXT_RETRY_DELAYS = [300, 1000, 1800];
 const CHAT_SAVE_DEBOUNCE_MS = 500;
+const MODEL_ROUTE_STORAGE_KEY = "ditty:selectedModelRoute";
 
 export const useAgentRunStore = defineStore("agent-run", () => {
   let persistTimer: number | null = null;
@@ -62,6 +66,10 @@ export const useAgentRunStore = defineStore("agent-run", () => {
   const currentPageContext = ref<PageContext | null>(null);
   const activeSessionId = ref<string | null>(null);
   const chatSessions = ref<ChatSessionSummary[]>([]);
+  const modelProviders = ref<ModelProvider[]>([]);
+  const selectedModelRoute = ref<ModelRoute | null>(null);
+  const modelLoading = ref(false);
+  const modelError = ref<string | null>(null);
   const historyLoading = ref(false);
   const historySaving = ref(false);
   const historyError = ref<string | null>(null);
@@ -78,6 +86,88 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     () => Boolean(activeAbortController.value) && loading.value,
   );
   const statusLabel = computed(() => run.value?.status ?? "idle");
+
+  const normalizeModelRoute = (
+    route: ModelRoute | null | undefined,
+    providers = modelProviders.value,
+  ): ModelRoute | null => {
+    if (!providers.length) {
+      return null;
+    }
+
+    const provider =
+      providers.find((item) => item.id === route?.providerId) ?? providers[0];
+    const model =
+      provider.models.find((item) => item.id === route?.modelId) ??
+      provider.models[0];
+
+    if (!model) {
+      return null;
+    }
+
+    return {
+      providerId: provider.id,
+      modelId: model.id,
+    };
+  };
+
+  const readStoredModelRoute = async () => {
+    try {
+      const stored = await chrome.storage.local.get(MODEL_ROUTE_STORAGE_KEY);
+      const route = stored[MODEL_ROUTE_STORAGE_KEY] as ModelRoute | undefined;
+
+      return route ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const persistSelectedModelRoute = async (route: ModelRoute) => {
+    try {
+      await chrome.storage.local.set({
+        [MODEL_ROUTE_STORAGE_KEY]: route,
+      });
+    } catch {
+      // The selected route still applies for this runtime session.
+    }
+  };
+
+  const setSelectedModelRoute = (route: ModelRoute) => {
+    const normalized = normalizeModelRoute(route);
+
+    if (!normalized) {
+      return;
+    }
+
+    selectedModelRoute.value = normalized;
+    void persistSelectedModelRoute(normalized);
+  };
+
+  const loadModels = async () => {
+    modelLoading.value = true;
+    modelError.value = null;
+
+    try {
+      const [response, storedRoute] = await Promise.all([
+        listModels(),
+        readStoredModelRoute(),
+      ]);
+      modelProviders.value = response.providers;
+      selectedModelRoute.value = normalizeModelRoute(
+        storedRoute ?? response.defaultRoute,
+        response.providers,
+      );
+
+      if (selectedModelRoute.value) {
+        void persistSelectedModelRoute(selectedModelRoute.value);
+      }
+    } catch (caught) {
+      modelError.value =
+        caught instanceof Error ? caught.message : "模型列表读取失败。";
+    } finally {
+      modelLoading.value = false;
+    }
+  };
 
   const clearPersistTimer = () => {
     if (persistTimer !== null) {
@@ -549,6 +639,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
         goal,
         pageContext,
         modelConversation.value,
+        selectedModelRoute.value ?? undefined,
         {
           signal: abortController.signal,
         },
@@ -758,6 +849,10 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     modelConversation,
     activeSessionId,
     chatSessions,
+    modelProviders,
+    selectedModelRoute,
+    modelLoading,
+    modelError,
     historyLoading,
     historySaving,
     historyError,
@@ -772,6 +867,8 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     stop,
     executePendingAction,
     rejectPendingAction,
+    loadModels,
+    setSelectedModelRoute,
     loadChatSessions,
     selectChatSession,
     removeChatSession,

@@ -13,6 +13,10 @@ const createState = (): AgentRunMessageState => {
     goal: "goal",
     pageUrl: "https://example.com",
     pageTitle: "Example",
+    modelRoute: {
+      providerId: "minmax",
+      modelId: "MiniMax-M2.7",
+    },
     createdAt: now,
     updatedAt: now,
   };

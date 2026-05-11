@@ -4,6 +4,7 @@ import type {
   ModelConversationMessage,
   PageContext,
 } from "../src/shared/types";
+import { getDefaultModelRoute } from "./config";
 import { getDatabase } from "./db";
 
 const MAX_VISIBLE_TEXT_LENGTH = 6000;
@@ -70,6 +71,7 @@ export class RunStore {
     }
 
     const stored = JSON.parse(row.stored_run_json) as StoredRun;
+    stored.run.modelRoute ??= getDefaultModelRoute();
     stored.persist = () => {
       this.set(stored.run.id, stored);
     };
@@ -79,6 +81,7 @@ export class RunStore {
   }
 
   set(runId: string, stored: StoredRun) {
+    stored.run.modelRoute ??= getDefaultModelRoute();
     stored.persist = () => {
       this.set(stored.run.id, stored);
     };

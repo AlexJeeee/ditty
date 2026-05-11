@@ -6,7 +6,9 @@ import type {
   AuthUser,
   ChatSessionSnapshot,
   ChatSessionSummary,
+  ModelRoute,
   ModelConversationMessage,
+  ModelsResponse,
   PageContext,
 } from "./types";
 
@@ -141,6 +143,7 @@ export const createAgentRun = async (
   goal: string,
   pageContext: PageContext,
   conversation: ModelConversationMessage[],
+  modelRoute?: ModelRoute,
   options?: AgentRequestOptions,
 ): Promise<AgentRun> => {
   try {
@@ -151,6 +154,7 @@ export const createAgentRun = async (
         goal,
         pageContext,
         conversation,
+        ...(modelRoute ? { modelRoute } : {}),
       }),
       signal: options?.signal,
     });
@@ -161,6 +165,14 @@ export const createAgentRun = async (
       error instanceof Error ? error.message : "Agent Run 创建失败。",
     );
   }
+};
+
+export const listModels = async (): Promise<ModelsResponse> => {
+  const response = await fetch(`${getApiBaseUrl()}/api/models`, {
+    headers: authHeaders(),
+  });
+
+  return parseJsonResponse<ModelsResponse>(response, "模型列表读取失败。");
 };
 
 export async function* streamAgentRun(

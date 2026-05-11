@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from "vue";
+import ModelPicker from "./ModelPicker.vue";
+import type { ModelProvider, ModelRoute } from "@/shared/types";
 
 const props = defineProps<{
   modelValue: string;
   loading: boolean;
   canSend: boolean;
   canStop: boolean;
+  modelProviders: ModelProvider[];
+  selectedModelRoute: ModelRoute | null;
+  modelLoading: boolean;
+  modelError: string | null;
 }>();
 
 const emit = defineEmits<{
   "update:modelValue": [goal: string];
+  "select-model-route": [route: ModelRoute];
   submit: [goal: string];
   stop: [];
 }>();
@@ -89,14 +96,24 @@ onMounted(() => resizeTextarea());
         @keydown.enter.exact="handleEnterKeydown"
       />
       <div class="composer-toolbar">
-        <button
-          class="composer-tool-button composer-plus-button"
-          type="button"
-          title="添加内容"
-          aria-label="添加内容"
-        >
-          <span aria-hidden="true">+</span>
-        </button>
+        <div class="composer-tools">
+          <button
+            class="composer-tool-button composer-plus-button"
+            type="button"
+            title="添加内容"
+            aria-label="添加内容"
+          >
+            <span aria-hidden="true">+</span>
+          </button>
+          <ModelPicker
+            :model-providers="modelProviders"
+            :selected-model-route="selectedModelRoute"
+            :model-loading="modelLoading"
+            :model-error="modelError"
+            :loading="loading"
+            @select-model-route="emit('select-model-route', $event)"
+          />
+        </div>
         <div class="composer-actions">
           <button
             class="composer-tool-button"
