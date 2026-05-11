@@ -15,12 +15,16 @@ import {
 } from "./model-tools";
 import {
   activeStreams,
+  RunStore,
   runs,
   setRunStatus,
   validatePageContext,
   type StoredRun,
 } from "./run-store";
 import { getChatHistoryStore } from "./chat-history-store";
+import { getAuthStore, type AuthStore } from "./auth-store";
+import { requireAuthenticatedUser } from "./auth-routes";
+import type { ChatHistoryStore } from "./chat-history-store";
 import {
   toErrorEvent,
   writeAssistantDone,
@@ -51,6 +55,12 @@ interface StreamAgentRunBody {
 
 interface UpsertChatSessionBody {
   snapshot?: ChatSessionSnapshot;
+}
+
+interface AgentRouteOptions {
+  authStore?: AuthStore;
+  chatHistoryStore?: ChatHistoryStore;
+  runStore?: RunStore;
 }
 
 const MAX_HISTORY_MESSAGES = 40;
@@ -190,6 +200,7 @@ const appendConversationMessage = (
   message: ModelConversationMessage,
 ) => {
   stored.conversation.push(message);
+  stored.persist?.();
   writeSseEvent(raw, {
     type: "conversation_message",
     runId: stored.run.id,
@@ -340,8 +351,13 @@ const streamOpenAICompletion = async (
   }
 };
 
-export const registerAgentRoutes = (fastify: FastifyInstance) => {
-  const chatHistoryStore = getChatHistoryStore();
+export const registerAgentRoutes = (
+  fastify: FastifyInstance,
+  options: AgentRouteOptions = {},
+) => {
+  const chatHistoryStore = options.chatHistoryStore ?? getChatHistoryStore();
+  const authStore = options.authStore ?? getAuthStore();
+  const runStore = options.runStore ?? runs;
 
   fastify.get("/health", async () => ({
     ok: true,
@@ -373,14 +389,29 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
     }
   });
 
-  fastify.get("/api/chat/sessions", async () => {
-    return chatHistoryStore.listSessions();
+  fastify.get("/api/chat/sessions", async (request, reply) => {
+    const user = requireAuthenticatedUser(request, reply, authStore);
+
+    if (!user) {
+      return reply;
+    }
+
+    return chatHistoryStore.listSessions(user.id);
   });
 
   fastify.get<{ Params: { sessionId: string } }>(
     "/api/chat/sessions/:sessionId",
     async (request, reply) => {
-      const snapshot = chatHistoryStore.getSession(request.params.sessionId);
+      const user = requireAuthenticatedUser(request, reply, authStore);
+
+      if (!user) {
+        return reply;
+      }
+
+      const snapshot = chatHistoryStore.getSession(
+        user.id,
+        request.params.sessionId,
+      );
 
       if (!snapshot) {
         return reply.code(404).send({
@@ -398,6 +429,12 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
     Params: { sessionId: string };
     Body: UpsertChatSessionBody;
   }>("/api/chat/sessions/:sessionId", async (request, reply) => {
+    const user = requireAuthenticatedUser(request, reply, authStore);
+
+    if (!user) {
+      return reply;
+    }
+
     const snapshot = request.body?.snapshot;
 
     if (!snapshot || typeof snapshot !== "object") {
@@ -408,7 +445,7 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
       });
     }
 
-    return chatHistoryStore.upsertSession({
+    return chatHistoryStore.upsertSession(user.id, {
       ...snapshot,
       id: request.params.sessionId,
     });
@@ -416,8 +453,17 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
 
   fastify.delete<{ Params: { sessionId: string } }>(
     "/api/chat/sessions/:sessionId",
-    async (request) => {
-      const deleted = chatHistoryStore.deleteSession(request.params.sessionId);
+    async (request, reply) => {
+      const user = requireAuthenticatedUser(request, reply, authStore);
+
+      if (!user) {
+        return reply;
+      }
+
+      const deleted = chatHistoryStore.deleteSession(
+        user.id,
+        request.params.sessionId,
+      );
 
       return {
         ok: true,
@@ -429,6 +475,12 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
   fastify.post<{ Body: CreateAgentRunBody }>(
     "/api/agent/runs",
     async (request, reply) => {
+      const user = requireAuthenticatedUser(request, reply, authStore);
+
+      if (!user) {
+        return reply;
+      }
+
       try {
         const goal = request.body?.goal?.trim();
 
@@ -441,6 +493,10 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
         }
 
         const pageContext = validatePageContext(request.body?.pageContext);
+        if (user.quotaRemaining <= 0) {
+          throw new Error("额度不足。");
+        }
+
         const currentUserMessage: ModelConversationMessage & {
           role: "user";
         } = {
@@ -458,8 +514,9 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
           updatedAt: now,
         };
 
-        runs.set(run.id, {
+        runStore.set(run.id, {
           run,
+          userId: user.id,
           goal,
           pageContext,
           conversation: [
@@ -470,14 +527,29 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
           currentUserMessageEmitted: false,
         });
 
+        try {
+          authStore.deductQuota(user.id);
+        } catch (error) {
+          runStore.delete(run.id);
+          throw error;
+        }
+
         return run;
       } catch (error) {
-        return reply.code(400).send({
-          error: {
-            message:
-              error instanceof Error ? error.message : "创建 Agent Run 失败。",
-          },
-        });
+        return reply
+          .code(
+            error instanceof Error && error.message === "额度不足。"
+              ? 403
+              : 400,
+          )
+          .send({
+            error: {
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "创建 Agent Run 失败。",
+            },
+          });
       }
     },
   );
@@ -485,9 +557,15 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
   fastify.post<{ Params: { runId: string }; Body: StreamAgentRunBody }>(
     "/api/agent/runs/:runId/stream",
     async (request, reply) => {
-      const stored = runs.get(request.params.runId);
+      const user = requireAuthenticatedUser(request, reply, authStore);
 
-      if (!stored) {
+      if (!user) {
+        return reply;
+      }
+
+      const stored = runStore.get(request.params.runId);
+
+      if (!stored || stored.userId !== user.id) {
         return reply.code(404).send({
           error: {
             message: "Agent Run 不存在或服务已重启，请重新发起任务。",
@@ -545,6 +623,7 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
           message: stored.currentUserMessage,
         });
         stored.currentUserMessageEmitted = true;
+        stored.persist?.();
       }
       writeSseEvent(reply.raw, {
         type: "message_delta",
@@ -617,9 +696,15 @@ export const registerAgentRoutes = (fastify: FastifyInstance) => {
   fastify.post<{ Params: { runId: string } }>(
     "/api/agent/runs/:runId/stop",
     async (request, reply) => {
-      const stored = runs.get(request.params.runId);
+      const user = requireAuthenticatedUser(request, reply, authStore);
 
-      if (!stored) {
+      if (!user) {
+        return reply;
+      }
+
+      const stored = runStore.get(request.params.runId);
+
+      if (!stored || stored.userId !== user.id) {
         return reply.code(404).send({
           error: {
             message: "Agent Run 不存在或服务已重启，请重新发起任务。",

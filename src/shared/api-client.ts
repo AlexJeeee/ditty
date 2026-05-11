@@ -1,6 +1,9 @@
 import type {
   AgentRun,
   AgentRunEvent,
+  AuthCredentials,
+  AuthSessionResponse,
+  AuthUser,
   ChatSessionSnapshot,
   ChatSessionSummary,
   ModelConversationMessage,
@@ -14,6 +17,11 @@ interface ApiErrorBody {
 }
 
 const DEFAULT_AGENT_API_BASE_URL = "http://127.0.0.1:8787";
+let accessToken = "";
+
+export const setApiAccessToken = (token: string) => {
+  accessToken = token;
+};
 
 const getApiBaseUrl = () => {
   return (
@@ -40,6 +48,21 @@ const parseJsonResponse = async <T>(
 
   return response.json() as Promise<T>;
 };
+
+const authHeaders = (): Record<string, string> => {
+  if (!accessToken) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${accessToken}`,
+  };
+};
+
+const jsonHeaders = (authenticated = true): Record<string, string> => ({
+  "Content-Type": "application/json",
+  ...(authenticated ? authHeaders() : {}),
+});
 
 const parseSseBlock = (block: string) => {
   const data = block
@@ -123,9 +146,7 @@ export const createAgentRun = async (
   try {
     const response = await fetch(`${getApiBaseUrl()}/api/agent/runs`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: jsonHeaders(),
       body: JSON.stringify({
         goal,
         pageContext,
@@ -155,7 +176,7 @@ export async function* streamAgentRun(
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          ...jsonHeaders(),
           Accept: "text/event-stream",
         },
         body: JSON.stringify({
@@ -185,6 +206,7 @@ export const stopAgentRun = async (
     `${getApiBaseUrl()}/api/agent/runs/${runId}/stop`,
     {
       method: "POST",
+      headers: authHeaders(),
     },
   );
 
@@ -195,7 +217,9 @@ export const stopAgentRun = async (
 };
 
 export const listChatSessions = async (): Promise<ChatSessionSummary[]> => {
-  const response = await fetch(`${getApiBaseUrl()}/api/chat/sessions`);
+  const response = await fetch(`${getApiBaseUrl()}/api/chat/sessions`, {
+    headers: authHeaders(),
+  });
 
   return parseJsonResponse<ChatSessionSummary[]>(
     response,
@@ -208,6 +232,9 @@ export const getChatSession = async (
 ): Promise<ChatSessionSnapshot> => {
   const response = await fetch(
     `${getApiBaseUrl()}/api/chat/sessions/${encodeURIComponent(sessionId)}`,
+    {
+      headers: authHeaders(),
+    },
   );
 
   return parseJsonResponse<ChatSessionSnapshot>(response, "历史聊天读取失败。");
@@ -220,9 +247,7 @@ export const saveChatSession = async (
     `${getApiBaseUrl()}/api/chat/sessions/${encodeURIComponent(snapshot.id)}`,
     {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: jsonHeaders(),
       body: JSON.stringify({ snapshot }),
     },
   );
@@ -237,6 +262,7 @@ export const deleteChatSession = async (
     `${getApiBaseUrl()}/api/chat/sessions/${encodeURIComponent(sessionId)}`,
     {
       method: "DELETE",
+      headers: authHeaders(),
     },
   );
 
@@ -244,4 +270,45 @@ export const deleteChatSession = async (
     response,
     "历史聊天删除失败。",
   );
+};
+
+export const registerUser = async (
+  credentials: AuthCredentials,
+): Promise<AuthSessionResponse> => {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/register`, {
+    method: "POST",
+    headers: jsonHeaders(false),
+    body: JSON.stringify(credentials),
+  });
+
+  return parseJsonResponse<AuthSessionResponse>(response, "注册失败。");
+};
+
+export const loginUser = async (
+  credentials: AuthCredentials,
+): Promise<AuthSessionResponse> => {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/login`, {
+    method: "POST",
+    headers: jsonHeaders(false),
+    body: JSON.stringify(credentials),
+  });
+
+  return parseJsonResponse<AuthSessionResponse>(response, "邮箱或密码不正确。");
+};
+
+export const getCurrentUser = async (): Promise<AuthUser> => {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/me`, {
+    headers: authHeaders(),
+  });
+
+  return parseJsonResponse<AuthUser>(response, "请重新登录。");
+};
+
+export const logoutUser = async (): Promise<{ ok: boolean }> => {
+  const response = await fetch(`${getApiBaseUrl()}/api/auth/logout`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+
+  return parseJsonResponse<{ ok: boolean }>(response, "退出登录失败。");
 };

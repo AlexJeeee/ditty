@@ -26,6 +26,7 @@ import type {
   ModelConversationMessage,
   PageContext,
 } from "@/shared/types";
+import { useAuthStore } from "./auth";
 import {
   appendTextDelta,
   applyAgentRunEvent,
@@ -212,6 +213,16 @@ export const useAgentRunStore = defineStore("agent-run", () => {
 
   const reset = () => {
     void startNewChat();
+  };
+
+  const clearForSignedOut = () => {
+    clearPersistTimer();
+    resetRuntimeState();
+    activeSessionId.value = null;
+    chatSessions.value = [];
+    historyLoading.value = false;
+    historySaving.value = false;
+    historyError.value = null;
   };
 
   const loadChatSessions = async () => {
@@ -542,6 +553,7 @@ export const useAgentRunStore = defineStore("agent-run", () => {
           signal: abortController.signal,
         },
       );
+      void useAuthStore().refreshCurrentUser();
 
       await consumeRunStream(pageContext, abortController);
       schedulePersist();
@@ -767,5 +779,6 @@ export const useAgentRunStore = defineStore("agent-run", () => {
     hydrateFromSnapshot,
     buildSnapshot,
     reset,
+    clearForSignedOut,
   };
 });
