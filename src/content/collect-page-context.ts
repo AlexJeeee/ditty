@@ -13,7 +13,7 @@ import type {
 } from "@/shared/types";
 
 const MAX_TEXT_LENGTH = 5000;
-const MAX_ELEMENTS = 80;
+const MAX_ELEMENTS = 100;
 const MAX_TABLES = 5;
 
 const collectVisibleText = () => {

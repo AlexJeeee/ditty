@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { AuthStore } from "./auth-store";
 import { ChatHistoryStore } from "./chat-history-store";
 import { createDatabase } from "./db";
 import type { ChatSessionSnapshot } from "../src/shared/types";
@@ -15,7 +16,18 @@ const createTempStore = () => {
 
   return {
     db,
+    authStore: new AuthStore(db),
     store: new ChatHistoryStore(db),
+  };
+};
+
+const createTestUsers = async (authStore: AuthStore) => {
+  const userA = await authStore.register("a@example.com", "password123");
+  const userB = await authStore.register("b@example.com", "password123");
+
+  return {
+    userA: userA.user.id,
+    userB: userB.user.id,
   };
 };
 
@@ -74,31 +86,74 @@ describe("ChatHistoryStore", () => {
     expect(row?.name).toBe("chat_sessions");
   });
 
-  it("upserts, reads, and sorts chat sessions by updatedAt", () => {
-    const { store } = createTempStore();
+  it("migrates an existing chat_sessions table before creating user indexes", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "chat-history-"));
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "history.sqlite");
+    const db = createDatabase(dbPath);
+
+    db.prepare("DROP TABLE chat_conversation_messages").run();
+    db.prepare("DROP TABLE chat_messages").run();
+    db.prepare("DROP INDEX IF EXISTS idx_chat_sessions_updated_at").run();
+    db.prepare("DROP TABLE chat_sessions").run();
+    db.exec(`
+      CREATE TABLE chat_sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        page_url TEXT NOT NULL DEFAULT '',
+        page_title TEXT NOT NULL DEFAULT '',
+        last_message_preview TEXT NOT NULL DEFAULT '',
+        message_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        snapshot_json TEXT NOT NULL
+      );
+    `);
+    db.close();
+
+    const migratedDb = createDatabase(dbPath);
+    const columns = migratedDb
+      .prepare("PRAGMA table_info(chat_sessions)")
+      .all() as { name: string }[];
+    const index = migratedDb
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
+      )
+      .get("idx_chat_sessions_user_updated_at") as { name: string } | undefined;
+
+    expect(columns.some((column) => column.name === "user_id")).toBe(true);
+    expect(index?.name).toBe("idx_chat_sessions_user_updated_at");
+
+    migratedDb.close();
+  });
+
+  it("upserts, reads, and sorts chat sessions by updatedAt", async () => {
+    const { authStore, store } = createTempStore();
+    const { userA } = await createTestUsers(authStore);
     const older = createSnapshot("chat_old", "2026-04-30T01:00:00.000Z");
     const newer = createSnapshot("chat_new", "2026-04-30T02:00:00.000Z");
 
-    store.upsertSession(older);
-    store.upsertSession(newer);
+    store.upsertSession(userA, older);
+    store.upsertSession(userA, newer);
 
-    expect(store.listSessions().map((session) => session.id)).toEqual([
+    expect(store.listSessions(userA).map((session) => session.id)).toEqual([
       "chat_new",
       "chat_old",
     ]);
-    expect(store.getSession("chat_old")).toMatchObject({
+    expect(store.getSession(userA, "chat_old")).toMatchObject({
       id: "chat_old",
       title: "Session chat_old",
       messages: [{ content: "Hello" }],
     });
   });
 
-  it("replaces message and conversation rows on upsert", () => {
-    const { db, store } = createTempStore();
+  it("replaces message and conversation rows on upsert", async () => {
+    const { authStore, db, store } = createTempStore();
+    const { userA } = await createTestUsers(authStore);
     const snapshot = createSnapshot("chat_replace", "2026-04-30T01:00:00.000Z");
 
-    store.upsertSession(snapshot);
-    store.upsertSession({
+    store.upsertSession(userA, snapshot);
+    store.upsertSession(userA, {
       ...snapshot,
       updatedAt: "2026-04-30T02:00:00.000Z",
       messages: [
@@ -131,21 +186,23 @@ describe("ChatHistoryStore", () => {
 
     expect(messageCount.count).toBe(1);
     expect(conversationCount.count).toBe(1);
-    expect(store.getSession("chat_replace")?.messages[0]?.content).toBe(
+    expect(store.getSession(userA, "chat_replace")?.messages[0]?.content).toBe(
       "Replaced",
     );
   });
 
-  it("deletes sessions and cascades child rows", () => {
-    const { db, store } = createTempStore();
+  it("deletes sessions and cascades child rows", async () => {
+    const { authStore, db, store } = createTempStore();
+    const { userA } = await createTestUsers(authStore);
 
     store.upsertSession(
+      userA,
       createSnapshot("chat_delete", "2026-04-30T01:00:00.000Z"),
     );
 
-    expect(store.deleteSession("chat_delete")).toBe(true);
-    expect(store.getSession("chat_delete")).toBeNull();
-    expect(store.listSessions()).toEqual([]);
+    expect(store.deleteSession(userA, "chat_delete")).toBe(true);
+    expect(store.getSession(userA, "chat_delete")).toBeNull();
+    expect(store.listSessions(userA)).toEqual([]);
 
     const messageCount = db
       .prepare(
@@ -154,5 +211,26 @@ describe("ChatHistoryStore", () => {
       .get("chat_delete") as { count: number };
 
     expect(messageCount.count).toBe(0);
+  });
+
+  it("isolates sessions by user", async () => {
+    const { authStore, store } = createTempStore();
+    const { userA, userB } = await createTestUsers(authStore);
+
+    store.upsertSession(
+      userA,
+      createSnapshot("chat_shared", "2026-04-30T01:00:00.000Z"),
+    );
+
+    expect(store.listSessions(userB)).toEqual([]);
+    expect(store.getSession(userB, "chat_shared")).toBeNull();
+    expect(store.deleteSession(userB, "chat_shared")).toBe(false);
+    expect(() =>
+      store.upsertSession(
+        userB,
+        createSnapshot("chat_shared", "2026-04-30T02:00:00.000Z"),
+      ),
+    ).toThrow("聊天会话不存在。");
+    expect(store.getSession(userA, "chat_shared")?.id).toBe("chat_shared");
   });
 });

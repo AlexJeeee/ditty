@@ -10,6 +10,7 @@ const MAX_ELEMENT_COUNT = 20;
 
 export interface StoredRun {
   run: AgentRun;
+  userId: string;
   goal: string;
   pageContext: PageContext;
   conversation: ModelConversationMessage[];

@@ -3,15 +3,17 @@ import "dotenv/config";
 import Fastify from "fastify";
 import { getPort } from "./config";
 import { registerAgentRoutes } from "./agent-routes";
+import { registerAuthRoutes } from "./auth-routes";
 
 const fastify = Fastify({
-  logger: true
+  logger: true,
 });
 
 await fastify.register(cors, {
-  origin: true
+  origin: true,
 });
 
+registerAuthRoutes(fastify);
 registerAgentRoutes(fastify);
 
 const port = getPort();
@@ -19,7 +21,7 @@ const port = getPort();
 try {
   await fastify.listen({
     host: "127.0.0.1",
-    port
+    port,
   });
 } catch (error) {
   fastify.log.error(error);

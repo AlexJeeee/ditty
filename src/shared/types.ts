@@ -213,6 +213,23 @@ export interface ExtensionError {
   details?: Record<string, unknown>;
 }
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  quotaRemaining: number;
+  createdAt: string;
+}
+
+export interface AuthCredentials {
+  email: string;
+  password: string;
+}
+
+export interface AuthSessionResponse {
+  accessToken: string;
+  user: AuthUser;
+}
+
 export interface ChatSessionSummary {
   id: string;
   title: string;

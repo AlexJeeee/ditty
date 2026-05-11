@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ChatPanel from "./components/ChatPanel.vue";
 import LoginPanel from "./components/LoginPanel.vue";
 import PageContextBar from "./components/PageContextBar.vue";
@@ -19,13 +19,26 @@ const agentRun = useAgentRunStore();
 const composerGoal = ref("");
 const handledSelectionActionId = ref("");
 
-onMounted(() => {
-  agentRun.loadChatSessions();
+onMounted(async () => {
+  await auth.initialize();
+
   pageContext.refresh();
   consumePendingSelectionAction();
   chrome.runtime.onMessage.addListener(handleRuntimeMessage);
   chrome.storage.onChanged.addListener(handleStorageChange);
 });
+
+watch(
+  () => auth.authenticated,
+  (authenticated) => {
+    if (authenticated) {
+      void agentRun.loadChatSessions();
+      return;
+    }
+
+    agentRun.clearForSignedOut();
+  },
+);
 
 onBeforeUnmount(() => {
   chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
@@ -67,6 +80,11 @@ const handleSelectionAction = async (payload: SelectionActionPayload) => {
   const goal = createSelectionGoal(payload);
 
   await chrome.storage.local.remove(PENDING_SELECTION_ACTION_STORAGE_KEY);
+
+  if (!auth.authenticated) {
+    composerGoal.value = goal;
+    return;
+  }
 
   await pageContext.refresh();
   pageContext.applySelectionAction(payload);

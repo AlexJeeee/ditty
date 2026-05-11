@@ -9,6 +9,7 @@ import type {
 
 interface ChatSessionRow {
   id: string;
+  user_id?: string | null;
   title: string;
   page_url: string;
   page_title: string;
@@ -62,32 +63,33 @@ export class ChatHistoryStore {
     this.db = db ?? getDatabase();
   }
 
-  listSessions(): ChatSessionSummary[] {
+  listSessions(userId: string): ChatSessionSummary[] {
     const rows = this.db
       .prepare(
         `
           SELECT id, title, page_url, page_title, last_message_preview,
             message_count, created_at, updated_at, snapshot_json
           FROM chat_sessions
+          WHERE user_id = ?
           ORDER BY updated_at DESC
         `,
       )
-      .all() as ChatSessionRow[];
+      .all(userId) as ChatSessionRow[];
 
     return rows.map(toSummary);
   }
 
-  getSession(sessionId: string): ChatSessionSnapshot | null {
+  getSession(userId: string, sessionId: string): ChatSessionSnapshot | null {
     const row = this.db
       .prepare(
         `
           SELECT id, title, page_url, page_title, last_message_preview,
             message_count, created_at, updated_at, snapshot_json
           FROM chat_sessions
-          WHERE id = ?
+          WHERE id = ? AND user_id = ?
         `,
       )
-      .get(sessionId) as ChatSessionRow | undefined;
+      .get(sessionId, userId) as ChatSessionRow | undefined;
 
     if (!row) {
       return null;
@@ -98,21 +100,33 @@ export class ChatHistoryStore {
     );
   }
 
-  upsertSession(snapshotValue: ChatSessionSnapshot): ChatSessionSnapshot {
+  upsertSession(
+    userId: string,
+    snapshotValue: ChatSessionSnapshot,
+  ): ChatSessionSnapshot {
     const snapshot = normalizeSnapshot(snapshotValue);
+    const existingOwner = this.db
+      .prepare("SELECT user_id FROM chat_sessions WHERE id = ?")
+      .get(snapshot.id) as { user_id: string | null } | undefined;
+
+    if (existingOwner?.user_id && existingOwner.user_id !== userId) {
+      throw new Error("聊天会话不存在。");
+    }
+
     const transaction = this.db.transaction(() => {
       this.db
         .prepare(
           `
             INSERT INTO chat_sessions (
-              id, title, page_url, page_title, last_message_preview,
+              id, user_id, title, page_url, page_title, last_message_preview,
               message_count, created_at, updated_at, snapshot_json
             )
             VALUES (
-              @id, @title, @pageUrl, @pageTitle, @lastMessagePreview,
+              @id, @userId, @title, @pageUrl, @pageTitle, @lastMessagePreview,
               @messageCount, @createdAt, @updatedAt, @snapshotJson
             )
             ON CONFLICT(id) DO UPDATE SET
+              user_id = excluded.user_id,
               title = excluded.title,
               page_url = excluded.page_url,
               page_title = excluded.page_title,
@@ -124,6 +138,7 @@ export class ChatHistoryStore {
         )
         .run({
           id: snapshot.id,
+          userId,
           title: snapshot.title,
           pageUrl: snapshot.pageUrl,
           pageTitle: snapshot.pageTitle,
@@ -142,10 +157,10 @@ export class ChatHistoryStore {
     return snapshot;
   }
 
-  deleteSession(sessionId: string): boolean {
+  deleteSession(userId: string, sessionId: string): boolean {
     const result = this.db
-      .prepare("DELETE FROM chat_sessions WHERE id = ?")
-      .run(sessionId);
+      .prepare("DELETE FROM chat_sessions WHERE id = ? AND user_id = ?")
+      .run(sessionId, userId);
 
     return result.changes > 0;
   }
