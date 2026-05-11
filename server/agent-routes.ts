@@ -77,7 +77,13 @@ const truncateHistoryContent = (content: string) => {
     : content;
 };
 
-const validateConversation = (value: unknown): ModelConversationMessage[] => {
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+};
+
+export const validateConversation = (
+  value: unknown,
+): ModelConversationMessage[] => {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -107,6 +113,12 @@ const validateConversation = (value: unknown): ModelConversationMessage[] => {
             ? truncateHistoryContent(message.content)
             : null,
       };
+
+      if (typeof message.reasoning_content === "string") {
+        assistantMessage.reasoning_content = truncateHistoryContent(
+          message.reasoning_content,
+        );
+      }
 
       if (Array.isArray(message.tool_calls)) {
         const toolCalls = message.tool_calls
@@ -152,15 +164,27 @@ const validateConversation = (value: unknown): ModelConversationMessage[] => {
   return messages;
 };
 
-const toOpenAIMessage = (
+export const toOpenAIMessage = (
   message: ModelConversationMessage,
+  options?: { includeReasoningContent?: boolean },
 ): ChatCompletionMessageParam => {
   if (message.role === "assistant") {
-    return {
+    const assistantMessage: ChatCompletionMessageParam & {
+      reasoning_content?: string;
+    } = {
       role: "assistant",
       content: message.content,
       tool_calls: message.tool_calls,
     };
+
+    if (
+      options?.includeReasoningContent &&
+      typeof message.reasoning_content === "string"
+    ) {
+      assistantMessage.reasoning_content = message.reasoning_content;
+    }
+
+    return assistantMessage;
   }
 
   if (message.role === "tool") {
@@ -180,6 +204,7 @@ const toOpenAIMessage = (
 const createAssistantConversationMessage = (
   content: string,
   toolCalls: ToolCallAccumulator[],
+  reasoningContent = "",
 ): ModelConversationMessage => {
   const validToolCalls = toolCalls
     .filter((toolCall) => toolCall.name)
@@ -195,8 +220,27 @@ const createAssistantConversationMessage = (
   return {
     role: "assistant",
     content: content || null,
+    ...(reasoningContent ? { reasoning_content: reasoningContent } : {}),
     ...(validToolCalls.length ? { tool_calls: validToolCalls } : {}),
   };
+};
+
+const isDeepSeekRoute = (modelRoute: ModelRoute) => {
+  const provider = findProviderForRoute(modelRoute);
+
+  return (
+    provider.id.toLowerCase().includes("deepseek") ||
+    provider.name.toLowerCase().includes("deepseek") ||
+    provider.baseURL.toLowerCase().includes("deepseek")
+  );
+};
+
+const getReasoningContentDelta = (delta: unknown) => {
+  if (!isRecord(delta) || typeof delta.reasoning_content !== "string") {
+    return "";
+  }
+
+  return delta.reasoning_content;
 };
 
 const appendConversationMessage = (
@@ -235,17 +279,23 @@ const streamOpenAICompletion = async (
   const modelRoute = run.modelRoute ?? getDefaultModelRoute();
   const model = modelRoute.modelId;
   const messageId = createScopedId("openai");
+  const reasoningMessageId = createScopedId("reasoning");
   const openai = requireOpenAIClient(modelRoute);
   const toolCalls: ToolCallAccumulator[] = [];
   let assistantContent = "";
+  let reasoningContent = "";
   let hasAnswerText = false;
+  let hasReasoningText = false;
+  const includeReasoningContent = isDeepSeekRoute(modelRoute);
 
   const stream = await openai.chat.completions.create(
     {
       model,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        ...stored.conversation.map(toOpenAIMessage),
+        ...stored.conversation.map((message) =>
+          toOpenAIMessage(message, { includeReasoningContent }),
+        ),
       ],
       tools: MODEL_CHAT_TOOLS,
       tool_choice: "auto",
@@ -258,6 +308,19 @@ const streamOpenAICompletion = async (
   for await (const chunk of stream) {
     const choiceDelta = chunk.choices[0]?.delta;
     const delta = choiceDelta?.content;
+    const reasoningDelta = getReasoningContentDelta(choiceDelta);
+
+    if (reasoningDelta) {
+      hasReasoningText = true;
+      reasoningContent += reasoningDelta;
+      writeSseEvent(raw, {
+        type: "message_delta",
+        runId: run.id,
+        messageId: reasoningMessageId,
+        text: reasoningDelta,
+        channel: "reasoning",
+      });
+    }
 
     if (typeof delta === "string" && delta.length > 0) {
       hasAnswerText = true;
@@ -280,8 +343,20 @@ const streamOpenAICompletion = async (
   const assistantMessage = createAssistantConversationMessage(
     assistantContent,
     toolCalls,
+    reasoningContent,
   );
   appendConversationMessage(raw, stored, assistantMessage);
+
+  if (hasReasoningText) {
+    writeSseEvent(raw, {
+      type: "message_delta",
+      runId: run.id,
+      messageId: reasoningMessageId,
+      text: "",
+      channel: "reasoning",
+      done: true,
+    });
+  }
 
   if (hasAnswerText) {
     writeAssistantDone(raw, run.id, messageId);

@@ -99,6 +99,11 @@ export const appendAnswerDelta = (
   state: Pick<AgentRunMessageState, "messages">,
   event: AgentRunEvent & { type: "message_delta" },
 ) => {
+  if (event.channel === "reasoning") {
+    appendTextDelta(state, event.messageId, event.text, event.done, "thinking");
+    return;
+  }
+
   if (event.channel && event.channel !== "answer") {
     return;
   }

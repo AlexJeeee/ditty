@@ -169,6 +169,7 @@ export type ModelConversationMessage =
   | {
       role: "assistant";
       content: string | null;
+      reasoning_content?: string;
       tool_calls?: ModelToolCall[];
     }
   | {
@@ -186,7 +187,7 @@ export type AgentRunEvent =
       messageId: string;
       text: string;
       done?: boolean;
-      channel?: "thinking" | "answer";
+      channel?: "thinking" | "reasoning" | "answer";
     }
   | { type: "plan"; runId: string; plan: AgentPlan }
   | { type: "action_request"; runId: string; action: AgentAction }

@@ -6,7 +6,11 @@ import path from "node:path";
 import { AuthStore } from "./auth-store";
 import { ChatHistoryStore } from "./chat-history-store";
 import { createDatabase } from "./db";
-import { registerAgentRoutes } from "./agent-routes";
+import {
+  registerAgentRoutes,
+  toOpenAIMessage,
+  validateConversation,
+} from "./agent-routes";
 import { registerAuthRoutes } from "./auth-routes";
 import { RunStore, runs } from "./run-store";
 import type { PageContext } from "../src/shared/types";
@@ -52,6 +56,65 @@ afterEach(() => {
 });
 
 describe("agent auth routes", () => {
+  it("preserves DeepSeek reasoning content when validating conversation history", () => {
+    expect(
+      validateConversation([
+        {
+          role: "assistant",
+          content: null,
+          reasoning_content: "需要先读页面，再决定动作。",
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: {
+                name: "open_url",
+                arguments: '{"url":"https://example.com"}',
+              },
+            },
+          ],
+        },
+      ]),
+    ).toEqual([
+      {
+        role: "assistant",
+        content: null,
+        reasoning_content: "需要先读页面，再决定动作。",
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: {
+              name: "open_url",
+              arguments: '{"url":"https://example.com"}',
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("only passes reasoning content back to DeepSeek-compatible routes", () => {
+    const message = validateConversation([
+      {
+        role: "assistant",
+        content: "好的",
+        reasoning_content: "先确认用户意图。",
+      },
+    ])[0];
+
+    expect(
+      toOpenAIMessage(message, { includeReasoningContent: true }),
+    ).toMatchObject({
+      role: "assistant",
+      content: "好的",
+      reasoning_content: "先确认用户意图。",
+    });
+    expect(
+      toOpenAIMessage(message, { includeReasoningContent: false }),
+    ).not.toHaveProperty("reasoning_content");
+  });
+
   it("returns model provider metadata without leaking provider secrets", async () => {
     vi.stubEnv(
       "AI_MODEL_PROVIDERS_JSON",

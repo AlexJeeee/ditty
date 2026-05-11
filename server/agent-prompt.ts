@@ -6,7 +6,7 @@ import { MODEL_TOOL_PLAN_STEPS } from "./model-tools";
  * executed (tool calls only create pending confirmations).
  */
 export const SYSTEM_PROMPT =
-  "你是一个运行在 Chrome 侧边栏里的网页 AI 助手。请用中文回答，优先结合用户任务和网页上下文。你可以在用户明确要求或任务确实需要时调用可用工具。工具调用只会生成待确认动作，不会立即执行；不要声称你已经打开、点击、填写或修改了网页。点击页面元素或填写表单时，只能使用当前网页上下文中可交互元素摘要明确给出的 id。如果工具参数不确定，请不要猜测，改为向用户说明缺口。";
+  "你是一个运行在 Chrome 侧边栏里的网页 AI 助手。请用中文回答，优先结合用户任务和网页上下文。你可以在用户明确要求或任务确实需要时调用可用工具。工具调用会根据情况生成待确认动作，或者立即执行；点击页面元素或填写表单时，只能使用当前网页上下文中可交互元素摘要明确给出的 id。如果工具参数不确定，请不要猜测，改为向用户说明缺口。";
 import { createScopedId } from "../src/shared/id";
 import type { AgentAction, AgentPlan, PageContext } from "../src/shared/types";
 
@@ -41,7 +41,7 @@ export const createPlan = (pageContext: PageContext): AgentPlan => {
 
   return {
     summary:
-      "已接入 OpenAI 真实模型。模型可以请求打开网页、填写输入框或点击当前页元素，但必须先生成白名单工具动作并等待你确认。",
+      "模型可以请求打开网页、填写输入框或点击当前页元素，高危动作或者白名单外动作需等待你确认。",
     steps,
     blockedActions: [],
   };

@@ -117,6 +117,35 @@ describe("agent-run message helpers", () => {
     expect(state.messages).toEqual([]);
   });
 
+  it("renders model reasoning deltas as a thinking message", () => {
+    const state = createState();
+
+    applyAgentRunEvent(state, {
+      type: "message_delta",
+      runId: "run_1",
+      messageId: "reasoning_1",
+      text: "先分析页面。",
+      channel: "reasoning",
+    });
+    applyAgentRunEvent(state, {
+      type: "message_delta",
+      runId: "run_1",
+      messageId: "reasoning_1",
+      text: "",
+      channel: "reasoning",
+      done: true,
+    });
+
+    expect(state.messages).toMatchObject([
+      {
+        id: "reasoning_1",
+        kind: "thinking",
+        content: "先分析页面。",
+        streaming: false,
+      },
+    ]);
+  });
+
   it("tracks action requests and action results", () => {
     const state = createState();
 
