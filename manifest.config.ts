@@ -2,7 +2,7 @@ import { defineManifest } from "@crxjs/vite-plugin";
 
 export default defineManifest({
   manifest_version: 3,
-  name: "Chrome AI Agent",
+  name: "Ditty",
   description:
     "A controllable AI agent side panel for understanding and acting on webpages.",
   version: "0.1.0",
@@ -22,7 +22,7 @@ export default defineManifest({
     128: "icons/icon-128.png",
   },
   action: {
-    default_title: "Chrome AI Agent",
+    default_title: "Ditty",
     default_icon: {
       16: "icons/icon-16.png",
       32: "icons/icon-32.png",

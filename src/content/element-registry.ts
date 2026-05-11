@@ -6,6 +6,14 @@ export const clearElementRegistry = () => {
   elementCounter = 0;
 };
 
+export const pruneElementRegistry = () => {
+  for (const [id, element] of elementRegistry.entries()) {
+    if (!document.contains(element)) {
+      elementRegistry.delete(id);
+    }
+  }
+};
+
 export const registerElement = (element: Element) => {
   const existingId = [...elementRegistry.entries()].find(
     ([, value]) => value === element,

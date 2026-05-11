@@ -1,4 +1,4 @@
-import { clearElementRegistry, registerElement } from "./element-registry";
+import { pruneElementRegistry, registerElement } from "./element-registry";
 import {
   detectRiskLevel,
   getElementLabel,
@@ -168,7 +168,7 @@ const collectInteractiveElements = (): InteractiveElement[] => {
 };
 
 export const collectPageContext = (): PageContext => {
-  clearElementRegistry();
+  pruneElementRegistry();
 
   return {
     url: window.location.href,
