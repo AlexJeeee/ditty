@@ -80,7 +80,7 @@ MVP 阶段不包含以下能力：
 
 ### 3.0 当前实现状态
 
-当前仓库已经落地一个本地演示版 MVP：Side Panel 使用聊天流承载任务输入、计划、思考、回答、动作确认和执行结果；本地 Node 代理通过 OpenAI 兼容 Chat Completions 接口生成回答和工具动作；登录、任务历史、审计、额度和多模型路由仍是后续产品化范围。
+当前仓库已经落地一个本地演示版 MVP：Side Panel 使用聊天流承载任务输入、计划、回答、动作确认和执行结果；本地 Node 代理通过 OpenAI 兼容 Chat Completions 接口生成回答和工具动作；本地认证、任务历史、额度扣减和多供应商模型选择已具备基础实现。审计、成本统计、自动降级和企业级策略仍是后续产品化范围。
 
 当前已实现能力：
 
@@ -160,17 +160,17 @@ MVP 阶段不包含以下能力：
 
 MVP 支持的工具：
 
-| 工具 | 说明 | 风险级别 |
-| --- | --- | --- |
-| `read_page` | 读取当前页面可见摘要和结构化元素 | 低 |
-| `summarize_selection` | 总结用户选中文本 | 低 |
-| `extract_table` | 提取页面表格或列表 | 低 |
-| `highlight_element` | 高亮页面元素，帮助用户确认 | 低 |
-| `click_element` | 点击普通按钮、链接或选项 | 中 |
-| `fill_input` | 填写普通输入框 | 中 |
-| `scroll_page` | 页面滚动或跳转到元素位置 | 低 |
-| `open_url` | 打开新的浏览器标签页并访问指定 http/https 网址 | 中 |
-| `copy_result` | 将 Agent 结果复制到剪贴板 | 低 |
+| 工具                  | 说明                                           | 风险级别 |
+| --------------------- | ---------------------------------------------- | -------- |
+| `read_page`           | 读取当前页面可见摘要和结构化元素               | 低       |
+| `summarize_selection` | 总结用户选中文本                               | 低       |
+| `extract_table`       | 提取页面表格或列表                             | 低       |
+| `highlight_element`   | 高亮页面元素，帮助用户确认                     | 低       |
+| `click_element`       | 点击普通按钮、链接或选项                       | 中       |
+| `fill_input`          | 填写普通输入框                                 | 中       |
+| `scroll_page`         | 页面滚动或跳转到元素位置                       | 低       |
+| `open_url`            | 打开新的浏览器标签页并访问指定 http/https 网址 | 中       |
+| `copy_result`         | 将 Agent 结果复制到剪贴板                      | 低       |
 
 MVP 禁止或默认拦截的动作：
 
@@ -226,13 +226,13 @@ MVP 禁止或默认拦截的动作：
 
 ### 4.2 插件模块
 
-| 模块 | 职责 |
-| --- | --- |
-| Side Panel | 主交互界面，负责输入任务、展示计划、确认动作、查看结果 |
-| Content Script | 读取当前页面可见上下文，执行白名单 DOM 动作 |
-| Service Worker | 管理插件生命周期、消息转发、权限请求和后端通信 |
-| Options Page | 后续用于账号设置、模型偏好、隐私设置 |
-| Shared Types | 定义页面上下文、Agent 计划、工具动作、后端响应类型 |
+| 模块           | 职责                                                   |
+| -------------- | ------------------------------------------------------ |
+| Side Panel     | 主交互界面，负责输入任务、展示计划、确认动作、查看结果 |
+| Content Script | 读取当前页面可见上下文，执行白名单 DOM 动作            |
+| Service Worker | 管理插件生命周期、消息转发、权限请求和后端通信         |
+| Options Page   | 后续用于账号设置、模型偏好、隐私设置                   |
+| Shared Types   | 定义页面上下文、Agent 计划、工具动作、后端响应类型     |
 
 ### 4.3 后端代理
 
@@ -313,17 +313,30 @@ GET /api/models
 
 ```json
 {
-  "defaultModel": "auto",
-  "models": [
+  "defaultRoute": {
+    "providerId": "minmax",
+    "modelId": "MiniMax-M2.7"
+  },
+  "providers": [
     {
-      "id": "auto",
-      "name": "智能路由",
-      "capabilities": ["text", "tool_calling", "long_context"]
+      "id": "minmax",
+      "name": "MiniMax",
+      "models": [
+        {
+          "id": "MiniMax-M2.7",
+          "name": "MiniMax-M2.7"
+        }
+      ]
     },
     {
-      "id": "gpt",
-      "name": "OpenAI",
-      "capabilities": ["text", "tool_calling", "structured_output"]
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "models": [
+        {
+          "id": "deepseek-v4-pro",
+          "name": "deepSeek-v4-Pro"
+        }
+      ]
     }
   ]
 }
@@ -465,11 +478,11 @@ MVP 遵循最小权限原则：
 
 ### 6.3 风险分级
 
-| 风险级别 | 定义 | 处理方式 |
-| --- | --- | --- |
-| 低 | 读取、总结、滚动、高亮、复制结果 | 可直接执行或轻提示 |
-| 中 | 点击普通按钮、填写普通输入框 | 必须用户确认 |
-| 高 | 支付、登录、提交、删除、发布、上传 | MVP 默认禁止 |
+| 风险级别 | 定义                               | 处理方式           |
+| -------- | ---------------------------------- | ------------------ |
+| 低       | 读取、总结、滚动、高亮、复制结果   | 可直接执行或轻提示 |
+| 中       | 点击普通按钮、填写普通输入框       | 必须用户确认       |
+| 高       | 支付、登录、提交、删除、发布、上传 | MVP 默认禁止       |
 
 ## 7. 交互流程
 

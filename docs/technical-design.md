@@ -388,22 +388,22 @@ export interface AgentActionResult {
 
 - Fastify：HTTP API、健康检查和 SSE。
 - OpenAI SDK：调用 OpenAI 兼容 Chat Completions API。
-- 内存 Map：保存当前进程内的 run 状态和活动流。
+- SQLite + 内存 Map：SQLite 保存聊天历史和 run 快照，内存 Map 保存当前进程内的活动流。
 - TypeScript shared types：复用 `src/shared/types.ts` 中的 Agent、动作和事件类型。
 
-认证、持久化、审计、额度和多供应商路由不在当前本地演示版中实现；后续产品化时可以保持协议不变并替换或扩展后端实现。
+当前本地演示版已经包含本地认证、聊天历史持久化、额度扣减和 OpenAI-compatible 多供应商模型路由；审计、成本统计、自动降级和企业级密钥托管仍属于产品化后端扩展范围。
 
 ### 7.2 当前服务模块
 
-| 模块                     | 职责                                           |
-| ------------------------ | ---------------------------------------------- |
-| `server/index.ts`        | Fastify 初始化、CORS 注册、路由注册和监听启动  |
-| `server/config.ts`       | 读取端口、模型、超时、重试和 `OPENAI_BASE_URL` |
-| `server/agent-routes.ts` | 注册健康检查、创建 run、SSE stream、停止 run   |
-| `server/run-store.ts`    | 内存 run 存储、活动流管理、页面上下文裁剪      |
-| `server/agent-prompt.ts` | 构造默认计划和模型 prompt                      |
-| `server/model-tools.ts`  | OpenAI tool 定义、tool call 累积和动作生成     |
-| `server/sse.ts`          | SSE 事件写入、结束事件和错误事件转换           |
+| 模块                     | 职责                                                   |
+| ------------------------ | ------------------------------------------------------ |
+| `server/index.ts`        | Fastify 初始化、CORS 注册、路由注册和监听启动          |
+| `server/config.ts`       | 读取端口、模型供应商注册表、默认模型路由、超时和重试   |
+| `server/agent-routes.ts` | 注册健康检查、模型列表、创建 run、SSE stream、停止 run |
+| `server/run-store.ts`    | run 快照持久化、活动流管理、页面上下文裁剪             |
+| `server/agent-prompt.ts` | 构造默认计划和模型 prompt                              |
+| `server/model-tools.ts`  | OpenAI tool 定义、tool call 累积和动作生成             |
+| `server/sse.ts`          | SSE 事件写入、结束事件和错误事件转换                   |
 
 ### 7.3 Agent 状态机
 
@@ -454,12 +454,36 @@ POST /api/agent/runs/:runId/stream
 POST /api/agent/runs/:runId/stop
 ```
 
+模型列表接口：
+
+```http
+GET /api/models
+```
+
+响应只包含前端可展示的 provider/model 元数据，不返回 `baseURL`、`apiKeyEnv` 或 API Key：
+
+```ts
+export interface ModelsResponse {
+  defaultRoute: ModelRoute;
+  providers: Array<{
+    id: string;
+    name: string;
+    models: Array<{
+      id: string;
+      name: string;
+    }>;
+  }>;
+}
+```
+
 创建任务请求：
 
 ```ts
 export interface CreateAgentRunRequest {
   goal: string;
   pageContext: PageContext;
+  conversation?: ModelConversationMessage[];
+  modelRoute?: ModelRoute;
 }
 ```
 
@@ -472,6 +496,7 @@ export interface AgentRun {
   goal: string;
   pageUrl: string;
   pageTitle: string;
+  modelRoute: ModelRoute;
   plan?: AgentPlan;
   createdAt: string;
   updatedAt: string;
@@ -497,6 +522,11 @@ export type AgentRunEvent =
   | { type: "plan"; runId: string; plan: AgentPlan }
   | { type: "action_request"; runId: string; action: AgentAction }
   | { type: "action_result"; runId: string; result: AgentActionResult }
+  | {
+      type: "conversation_message";
+      runId: string;
+      message: ModelConversationMessage;
+    }
   | { type: "error"; runId: string; error: ExtensionError };
 ```
 
@@ -510,22 +540,28 @@ SSE 要求：
 
 ### 9.1 当前工具定义
 
-当前本地代理只把 `open_url` 暴露给模型工具调用。模型请求工具时，`server/model-tools.ts` 会累积流式 tool call、解析 JSON 参数、校验 URL，并生成插件内部 `AgentAction`。未知工具或非法参数会被转换为阻断说明。
+当前本地代理把 `open_url`、`click_element` 和 `fill_input` 暴露给模型工具调用。模型请求工具时，`server/model-tools.ts` 会累积流式 tool call、解析 JSON 参数、校验 URL 或元素 id，并生成插件内部 `AgentAction`。未知工具或非法参数会被转换为阻断说明。
 
-### 9.2 后续 Provider 抽象
+### 9.2 当前模型路由
 
-产品化后端可以在当前协议上增加 Provider 抽象：
+本地代理通过 `AI_MODEL_PROVIDERS_JSON` 注册 OpenAI-compatible 模型供应商。每个 provider 包含：
 
 ```ts
 export interface ModelProvider {
   id: string;
-  displayName: string;
-  capabilities: ModelCapability[];
-  createStream(input: AgentRunInput): AsyncIterable<AgentRunEvent>;
+  name: string;
+  baseURL: string;
+  apiKeyEnv: string;
+  models: Array<{
+    id: string;
+    name: string;
+  }>;
 }
 ```
 
-后续路由策略：
+前端只能通过 `/api/models` 读取公开元数据；真实 API Key 由 `apiKeyEnv` 指向后端环境变量。用户在 `ModelPicker.vue` 中选择的 `ModelRoute` 会在创建 run 时写入 `AgentRun.modelRoute`，工具执行后的续跑继续使用同一路由。
+
+后续产品化路由策略可在此基础上扩展：
 
 - 中文网页和中文任务优先考虑中文效果稳定的模型。
 - 长页面优先选择长上下文能力更好的模型。
@@ -694,7 +730,7 @@ VITE_AGENT_API_BASE_URL=http://127.0.0.1:8787
 
 ```text
 AI_AGENT_PORT=8787
-AI_MODEL_PROVIDERS_JSON=[{"id":"minmax","name":"MiniMax","baseURL":"https://api.minimaxi.com/v1","apiKeyEnv":"MINIMAX_API_KEY","models":[{"id":"MiniMax-M2.7","name":"MiniMax M2.7"}]},{"id":"deepseek","name":"DeepSeek","baseURL":"https://api.deepseek.com/v1","apiKeyEnv":"DEEPSEEK_API_KEY","models":[{"id":"deepseek-chat","name":"DeepSeek Chat"}]}]
+AI_MODEL_PROVIDERS_JSON=[{"id":"minmax","name":"MiniMax","baseURL":"https://api.minimaxi.com/v1","apiKeyEnv":"MINIMAX_API_KEY","models":[{"id":"MiniMax-M2.7","name":"MiniMax-M2.7"}]},{"id":"deepseek","name":"DeepSeek","baseURL":"https://api.deepseek.com/v1","apiKeyEnv":"DEEPSEEK_API_KEY","models":[{"id":"deepseek-v4-pro","name":"deepSeek-v4-Pro"},{"id":"deepseek-v4-flash","name":"deepSeek-v4-flash"}]}]
 AI_DEFAULT_PROVIDER=minmax
 AI_DEFAULT_MODEL=MiniMax-M2.7
 OPENAI_TIMEOUT_MS=120000

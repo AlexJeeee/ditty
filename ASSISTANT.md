@@ -47,34 +47,35 @@ Local Fastify Server  →  OpenAI-compatible Provider
 
 ### Extension source layout
 
-| Path                                            | Role                                                                              |
-| ----------------------------------------------- | --------------------------------------------------------------------------------- |
-| `src/background/service-worker.ts`              | Extension lifecycle, message routing, tab events                                  |
-| `src/background/action-executors.ts`            | Browser-level actions (e.g. `open_url`)                                           |
-| `src/content/index.ts`                          | Content script entry; wires up collection and selection menu                      |
-| `src/content/collect-page-context.ts`           | Extracts visible text, headings, tables, interactive elements                     |
-| `src/content/element-registry.ts`               | In-memory `elementId` → DOM element map (per page lifecycle)                      |
-| `src/content/execute-action.ts`                 | Whitelisted DOM action executor                                                   |
-| `src/content/risk-detector.ts`                  | Local risk classification for actions                                             |
-| `src/content/selection-menu.ts`                 | Floating menu on text selection                                                   |
-| `src/shared/types.ts`                           | Single source of truth for all shared types (AgentAction, PageContext, events, …) |
-| `src/shared/extension-messages.ts`              | Typed `chrome.runtime` message union                                              |
-| `src/shared/api-client.ts`                      | Fetch wrapper for the local proxy API                                             |
-| `src/shared/id.ts`                              | `createScopedId()` — use this everywhere instead of ad-hoc `Date.now()`           |
-| `src/side-panel/stores/agent-run.ts`            | Agent run orchestration, API calls, stop, action dispatch                         |
-| `src/side-panel/stores/agent-run-messages.ts`   | Pure logic: message creation, event application, action message state             |
-| `src/side-panel/stores/page-context.ts`         | Pinia store for current tab's `PageContext`                                       |
-| `src/side-panel/stores/auth.ts`                 | Demo-only auth state                                                              |
-| `src/side-panel/components/ChatPanel.vue`       | Chat area shell and auto-scroll                                                   |
-| `src/side-panel/components/ChatComposer.vue`    | Input box, send and stop                                                          |
-| `src/side-panel/components/ChatMessageItem.vue` | Single message rendering: plan, thinking blocks, action confirm cards             |
+| Path                                            | Role                                                                               |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `src/background/service-worker.ts`              | Extension lifecycle, message routing, tab events                                   |
+| `src/background/action-executors.ts`            | Browser-level actions (e.g. `open_url`)                                            |
+| `src/content/index.ts`                          | Content script entry; wires up collection and selection menu                       |
+| `src/content/collect-page-context.ts`           | Extracts visible text, headings, tables, interactive elements                      |
+| `src/content/element-registry.ts`               | In-memory `elementId` → DOM element map (per page lifecycle)                       |
+| `src/content/execute-action.ts`                 | Whitelisted DOM action executor                                                    |
+| `src/content/risk-detector.ts`                  | Local risk classification for actions                                              |
+| `src/content/selection-menu.ts`                 | Floating menu on text selection                                                    |
+| `src/shared/types.ts`                           | Single source of truth for all shared types (AgentAction, PageContext, events, …)  |
+| `src/shared/extension-messages.ts`              | Typed `chrome.runtime` message union                                               |
+| `src/shared/api-client.ts`                      | Fetch wrapper for the local proxy API                                              |
+| `src/shared/id.ts`                              | `createScopedId()` — use this everywhere instead of ad-hoc `Date.now()`            |
+| `src/side-panel/stores/agent-run.ts`            | Agent run orchestration, model list loading, selected model persistence, API calls |
+| `src/side-panel/stores/agent-run-messages.ts`   | Pure logic: message creation, event application, action message state              |
+| `src/side-panel/stores/page-context.ts`         | Pinia store for current tab's `PageContext`                                        |
+| `src/side-panel/stores/auth.ts`                 | Demo-only auth state                                                               |
+| `src/side-panel/components/ChatPanel.vue`       | Chat area shell and auto-scroll                                                    |
+| `src/side-panel/components/ChatComposer.vue`    | Input box, bottom toolbar layout, send and stop                                    |
+| `src/side-panel/components/ModelPicker.vue`     | Model picker trigger and popover list                                              |
+| `src/side-panel/components/ChatMessageItem.vue` | Single message rendering: plan, thinking blocks, action confirm cards              |
 
 ### Server layout
 
 | Path                     | Role                                                                                                                                                     |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `server/index.ts`        | Fastify init, CORS, route registration, listen                                                                                                           |
-| `server/config.ts`       | Env vars: port, model, timeout, retries, base URL                                                                                                        |
+| `server/config.ts`       | Env vars: port, model provider registry, default model route, timeout and retries                                                                        |
 | `server/agent-routes.ts` | `GET /health`, `GET /health/openai`, `GET /api/models`, `POST /api/agent/runs`, `POST /api/agent/runs/:runId/stream`, `POST /api/agent/runs/:runId/stop` |
 | `server/run-store.ts`    | In-memory run state + active stream management + context trimming                                                                                        |
 | `server/agent-prompt.ts` | System prompt and default plan construction                                                                                                              |
@@ -98,7 +99,7 @@ Local Fastify Server  →  OpenAI-compatible Provider
 Copy `.env.example` to `.env`. Required at minimum:
 
 ```
-AI_MODEL_PROVIDERS_JSON=[{"id":"minmax","name":"MiniMax","baseURL":"https://api.minimaxi.com/v1","apiKeyEnv":"MINIMAX_API_KEY","models":[{"id":"MiniMax-M2.7","name":"MiniMax M2.7"}]},{"id":"deepseek","name":"DeepSeek","baseURL":"https://api.deepseek.com/v1","apiKeyEnv":"DEEPSEEK_API_KEY","models":[{"id":"deepseek-chat","name":"DeepSeek Chat"}]}]
+AI_MODEL_PROVIDERS_JSON=[{"id":"minmax","name":"MiniMax","baseURL":"https://api.minimaxi.com/v1","apiKeyEnv":"MINIMAX_API_KEY","models":[{"id":"MiniMax-M2.7","name":"MiniMax-M2.7"}]},{"id":"deepseek","name":"DeepSeek","baseURL":"https://api.deepseek.com/v1","apiKeyEnv":"DEEPSEEK_API_KEY","models":[{"id":"deepseek-v4-pro","name":"deepSeek-v4-Pro"},{"id":"deepseek-v4-flash","name":"deepSeek-v4-flash"}]}]
 AI_DEFAULT_PROVIDER=minmax
 AI_DEFAULT_MODEL=MiniMax-M2.7
 MINIMAX_API_KEY=sk-...
@@ -111,6 +112,7 @@ VITE_AGENT_API_BASE_URL=http://127.0.0.1:8787  # consumed by extension frontend
 
 `VITE_AGENT_API_BASE_URL` is the only env var that goes into the extension bundle. All model secrets stay server-side.
 If `AI_MODEL_PROVIDERS_JSON` is absent, the server falls back to the legacy single-provider `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` configuration.
+The side panel reads public provider/model metadata from `GET /api/models`; user selection is saved in `chrome.storage.local` and each created run stores its fixed `modelRoute`.
 
 ## Loading the Extension in Chrome
 

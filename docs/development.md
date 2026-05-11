@@ -36,8 +36,8 @@ pnpm dev:all
 
 ## 当前模块约定
 
-- `ChatPanel.vue` 是聊天区外壳；输入框逻辑放在 `ChatComposer.vue`；单条消息渲染放在 `ChatMessageItem.vue`。
-- `agent-run.ts` 只做运行编排；消息生成、事件应用和 action message 状态更新放在 `agent-run-messages.ts`。
+- `ChatPanel.vue` 是聊天区外壳；输入框和底部工具栏布局放在 `ChatComposer.vue`；模型选择入口和弹层放在 `ModelPicker.vue`；单条消息渲染放在 `ChatMessageItem.vue`。
+- `agent-run.ts` 做运行编排、模型列表加载和模型选择持久化；消息生成、事件应用和 action message 状态更新放在 `agent-run-messages.ts`。
 - 插件内部消息协议集中在 `src/shared/extension-messages.ts`，当前只保留页面上下文、动作执行、选中文本操作和活动标签页变化。
 - 本地代理入口是 `server/index.ts`；路由、配置、run 存储、prompt/plan、SSE 分别拆在 `server/agent-routes.ts`、`server/config.ts`、`server/run-store.ts`、`server/agent-prompt.ts`、`server/sse.ts`。
 - ID 统一通过 `src/shared/id.ts` 的 `createScopedId` 生成，避免各模块重复拼接 `Date.now()` 和随机串。

@@ -1,6 +1,6 @@
-# Chrome AI Agent
+# Ditty
 
-一个基于 Chrome Manifest V3 的网页 AI Agent 插件。插件通过 Side Panel 读取当前网页上下文，支持聊天式任务输入、选中文本快捷菜单、Agent 计划展示、动作确认和受控页面操作。
+Ditty 一个基于 Chrome Manifest V3 的网页 AI Agent 插件。插件通过 Side Panel 读取当前网页上下文，支持聊天式任务输入、选中文本快捷菜单、Agent 计划展示、动作确认和受控页面操作。
 
 当前 AI 聊天能力通过本地 Node 代理接入 OpenAI 兼容的 Chat Completions API。模型 Key 只放在本地 `.env` 中，Chrome 扩展只调用本地代理服务。
 
@@ -8,6 +8,7 @@
 
 - 聊天式侧边栏：用户输入任务后，Agent 在聊天流中返回思考、计划、回答和执行结果。
 - 流式输出：本地代理把模型流式响应转换为插件现有的增量事件。
+- 模型选择：输入框左下角提供模型选择入口，可在 MiniMax、DeepSeek 等已配置供应商和模型之间切换。
 - 可折叠思考与计划：Agent 思考和执行计划默认以折叠块展示，减少聊天区占用。
 - 选中文本快捷菜单：网页中选中文本后，旁边弹出 `翻译`、`解释`、`添加到对话`。
 - 自动打开侧边栏：点击选中文本菜单后自动打开 Agent Side Panel，并同步本次选区。
@@ -66,7 +67,7 @@ cp .env.example .env
 `.env` 至少需要：
 
 ```text
-AI_MODEL_PROVIDERS_JSON=[{"id":"minmax","name":"MiniMax","baseURL":"https://api.minimaxi.com/v1","apiKeyEnv":"MINIMAX_API_KEY","models":[{"id":"MiniMax-M2.7","name":"MiniMax M2.7"}]},{"id":"deepseek","name":"DeepSeek","baseURL":"https://api.deepseek.com/v1","apiKeyEnv":"DEEPSEEK_API_KEY","models":[{"id":"deepseek-chat","name":"DeepSeek Chat"}]}]
+AI_MODEL_PROVIDERS_JSON=[{"id":"minmax","name":"MiniMax","baseURL":"https://api.minimaxi.com/v1","apiKeyEnv":"MINIMAX_API_KEY","models":[{"id":"MiniMax-M2.7","name":"MiniMax-M2.7"}]},{"id":"deepseek","name":"DeepSeek","baseURL":"https://api.deepseek.com/v1","apiKeyEnv":"DEEPSEEK_API_KEY","models":[{"id":"deepseek-v4-pro","name":"deepSeek-v4-Pro"},{"id":"deepseek-v4-flash","name":"deepSeek-v4-flash"}]}]
 AI_DEFAULT_PROVIDER=minmax
 AI_DEFAULT_MODEL=MiniMax-M2.7
 MINIMAX_API_KEY=sk-...
@@ -78,7 +79,7 @@ AI_AGENT_DB_PATH=server/.data/chat-history.sqlite
 VITE_AGENT_API_BASE_URL=http://127.0.0.1:8787
 ```
 
-`AI_MODEL_PROVIDERS_JSON` 只描述供应商和模型元数据；真实 Key 通过每个 provider 的 `apiKeyEnv` 指向独立环境变量，只存在本地 Node 代理进程中。未配置 `AI_MODEL_PROVIDERS_JSON` 时，服务端仍会兼容旧的 `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` 单供应商配置。
+`AI_MODEL_PROVIDERS_JSON` 只描述供应商和模型元数据；真实 Key 通过每个 provider 的 `apiKeyEnv` 指向独立环境变量，只存在本地 Node 代理进程中。Side Panel 会通过 `/api/models` 读取可选模型，用户选择会保存在 `chrome.storage.local`，每次创建 run 时固定为当时的 `modelRoute`。未配置 `AI_MODEL_PROVIDERS_JSON` 时，服务端仍会兼容旧的 `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` 单供应商配置。
 
 同时启动扩展开发服务器和本地 AI 代理：
 
@@ -128,9 +129,10 @@ git diff --check
 ## 代码结构说明
 
 - `src/side-panel/components/ChatPanel.vue` 只负责聊天区外壳和自动滚动。
-- `src/side-panel/components/ChatComposer.vue` 负责输入框自适应、发送和停止。
+- `src/side-panel/components/ChatComposer.vue` 负责输入框自适应、发送、停止和底部工具栏布局。
+- `src/side-panel/components/ModelPicker.vue` 负责模型选择入口和模型列表弹层，模型图标来自 `public/icons/models/`。
 - `src/side-panel/components/ChatMessageItem.vue` 负责单条消息、计划、思考块和动作确认渲染。
-- `src/side-panel/stores/agent-run.ts` 负责 Agent run 编排、模型选择、API 调用、停止和动作执行。
+- `src/side-panel/stores/agent-run.ts` 负责 Agent run 编排、模型列表加载、模型选择持久化、API 调用、停止和动作执行。
 - `src/side-panel/stores/agent-run-messages.ts` 保存聊天消息类型、消息生成和事件应用等纯逻辑。
 - `server/index.ts` 只负责 Fastify 初始化、CORS 和启动监听。
 - `server/agent-routes.ts` 注册 `/health`、`/health/openai`、`/api/models`、`/api/agent/runs`、`/api/agent/runs/:runId/stream` 和 `/api/agent/runs/:runId/stop`。

@@ -24,25 +24,26 @@ flowchart LR
 
 ## 2. 代码入口地图
 
-| 模块                | 关键文件                                | 主要职责                                                                  |
-| ------------------- | --------------------------------------- | ------------------------------------------------------------------------- |
-| 扩展 Manifest       | `manifest.config.ts`                    | 声明 MV3 权限、Background、Side Panel、Content Script 和本地代理访问权限  |
-| Vite/CRXJS          | `vite.config.ts`                        | 通过 `@crxjs/vite-plugin` 构建扩展，开发期固定 `localhost:5173`           |
-| Side Panel 入口     | `src/side-panel/App.vue`                | 初始化页面上下文，监听选区任务和标签页变化，串起聊天面板                  |
-| Agent run store     | `src/side-panel/stores/agent-run.ts`    | 创建 run、消费 SSE、维护消息流、执行/跳过待确认动作                       |
-| 页面上下文 store    | `src/side-panel/stores/page-context.ts` | 向 Background 请求当前页上下文，保存 Side Panel 当前页面状态              |
-| 扩展消息协议        | `src/shared/extension-messages.ts`      | 定义 `page_context:get`、`agent_action:execute`、选区操作和标签页变化消息 |
-| 共享领域类型        | `src/shared/types.ts`                   | 定义 `PageContext`、`AgentRun`、`AgentAction`、SSE event 等核心类型       |
-| Background          | `src/background/service-worker.ts`      | 接收 Side Panel / Content Script 消息，转发页面采集和动作执行             |
-| 浏览器级动作        | `src/background/action-executors.ts`    | 执行 `open_url`，并把页面动作转发给 Content Script                        |
-| Content Script 入口 | `src/content/index.ts`                  | 注册选中文本菜单，响应页面上下文采集和动作执行消息                        |
-| 页面采集            | `src/content/collect-page-context.ts`   | 提取标题、URL、选区、可见文本、标题结构、表格和可交互元素                 |
-| DOM 动作执行        | `src/content/execute-action.ts`         | 执行高亮、点击、填写、滚动、复制等白名单动作，并阻断高风险操作            |
-| 本地服务入口        | `server/index.ts`                       | 初始化 Fastify、CORS 和 Agent 路由                                        |
-| Agent 路由          | `server/agent-routes.ts`                | 提供 run 创建、SSE 流、停止 run、健康检查接口                             |
-| 模型工具            | `server/model-tools.ts`                 | 定义可给模型调用的工具，并把 tool call 转成 `AgentAction`                 |
-| Prompt/计划         | `server/agent-prompt.ts`                | 组装模型 prompt，生成前端展示用计划                                       |
-| run 存储            | `server/run-store.ts`                   | 内存保存 run、会话上下文和活跃流                                          |
+| 模块                | 关键文件                                    | 主要职责                                                                          |
+| ------------------- | ------------------------------------------- | --------------------------------------------------------------------------------- |
+| 扩展 Manifest       | `manifest.config.ts`                        | 声明 MV3 权限、Background、Side Panel、Content Script 和本地代理访问权限          |
+| Vite/CRXJS          | `vite.config.ts`                            | 通过 `@crxjs/vite-plugin` 构建扩展，开发期固定 `localhost:5173`                   |
+| Side Panel 入口     | `src/side-panel/App.vue`                    | 初始化页面上下文，监听选区任务和标签页变化，串起聊天面板                          |
+| Agent run store     | `src/side-panel/stores/agent-run.ts`        | 创建 run、消费 SSE、维护消息流、执行/跳过待确认动作                               |
+| 页面上下文 store    | `src/side-panel/stores/page-context.ts`     | 向 Background 请求当前页上下文，保存 Side Panel 当前页面状态                      |
+| 模型选择组件        | `src/side-panel/components/ModelPicker.vue` | 展示当前模型、打开模型列表弹层、发出模型选择事件                                  |
+| 扩展消息协议        | `src/shared/extension-messages.ts`          | 定义 `page_context:get`、`agent_action:execute`、选区操作和标签页变化消息         |
+| 共享领域类型        | `src/shared/types.ts`                       | 定义 `PageContext`、`AgentRun`、`ModelRoute`、`AgentAction`、SSE event 等核心类型 |
+| Background          | `src/background/service-worker.ts`          | 接收 Side Panel / Content Script 消息，转发页面采集和动作执行                     |
+| 浏览器级动作        | `src/background/action-executors.ts`        | 执行 `open_url`，并把页面动作转发给 Content Script                                |
+| Content Script 入口 | `src/content/index.ts`                      | 注册选中文本菜单，响应页面上下文采集和动作执行消息                                |
+| 页面采集            | `src/content/collect-page-context.ts`       | 提取标题、URL、选区、可见文本、标题结构、表格和可交互元素                         |
+| DOM 动作执行        | `src/content/execute-action.ts`             | 执行高亮、点击、填写、滚动、复制等白名单动作，并阻断高风险操作                    |
+| 本地服务入口        | `server/index.ts`                           | 初始化 Fastify、CORS 和 Agent 路由                                                |
+| Agent 路由          | `server/agent-routes.ts`                    | 提供模型列表、run 创建、SSE 流、停止 run、健康检查接口                            |
+| 模型工具            | `server/model-tools.ts`                     | 定义可给模型调用的工具，并把 tool call 转成 `AgentAction`                         |
+| Prompt/计划         | `server/agent-prompt.ts`                    | 组装模型 prompt，生成前端展示用计划                                               |
+| run 存储            | `server/run-store.ts`                       | 持久化 run 快照、保存会话上下文和活跃流                                           |
 
 ## 3. 启动后的运行形态
 
@@ -59,7 +60,44 @@ pnpm dev:all
 
 Chrome 中实际加载的是项目根目录下的 `dist` 目录。开发期不需要每次手动 `pnpm build`；保持 `pnpm dev` 运行，Side Panel UI 通常走 HMR，Content Script 改动必要时刷新目标网页，Background 或 Manifest 改动可能需要刷新扩展。
 
-## 4. 主流程：用户输入任务
+## 4. 模型选择流程
+
+模型供应商和模型列表来自本地服务，不在前端写死：
+
+1. `src/side-panel/App.vue` 初始化时调用 `agentRun.loadModels()`。
+2. `src/side-panel/stores/agent-run.ts` 通过 `src/shared/api-client.ts` 请求：
+
+```text
+GET /api/models
+```
+
+3. `server/agent-routes.ts` 返回 `server/config.ts` 从 `AI_MODEL_PROVIDERS_JSON` 解析出的公开元数据：
+
+```ts
+{
+  defaultRoute: {
+    providerId: string;
+    modelId: string;
+  }
+  providers: Array<{
+    id: string;
+    name: string;
+    models: Array<{
+      id: string;
+      name: string;
+    }>;
+  }>;
+}
+```
+
+4. `agent-run.ts` 会优先读取 `chrome.storage.local` 中的 `ditty:selectedModelRoute`；没有历史选择时使用服务端 `defaultRoute`。
+5. `ChatComposer.vue` 底部工具栏左侧先显示 `+`，右侧是 `ModelPicker.vue`。模型入口展示当前模型图标和模型名称，点击后弹出模型列表。
+6. `ModelPicker.vue` 的列表项展示模型图标、供应商名称和模型名称。MiniMax / DeepSeek 图标来自 `public/icons/models/miniMax.png` 和 `public/icons/models/deepSeek.png`。
+7. 用户选择模型后，`agent-run.ts` 更新 `selectedModelRoute` 并写回 `chrome.storage.local`。
+
+模型选择是“全局默认 + run 固定”：切换模型只影响下一次新任务；已经创建的 run 和工具执行后的续跑会继续使用该 run 创建时的 `modelRoute`。
+
+## 5. 主流程：用户输入任务
 
 ### 4.1 Side Panel 读取当前网页
 
@@ -95,14 +133,14 @@ Chrome 中实际加载的是项目根目录下的 `dist` 目录。开发期不�
 
 1. 用户在输入框提交任务。
 2. `src/side-panel/App.vue` 的 `start()` 会再次刷新页面上下文，避免拿到过期页面。
-3. `src/side-panel/stores/agent-run.ts` 调用 `createAgentRun(goal, pageContext, conversation)`。
+3. `src/side-panel/stores/agent-run.ts` 调用 `createAgentRun(goal, pageContext, conversation, selectedModelRoute)`。
 4. `src/shared/api-client.ts` 请求本地服务：
 
 ```text
 POST /api/agent/runs
 ```
 
-5. `server/agent-routes.ts` 校验 `goal` 和 `pageContext`，用 `buildPrompt()` 生成模型 user message，并把 run 存入 `server/run-store.ts` 的内存 Map。
+5. `server/agent-routes.ts` 校验 `goal`、`pageContext` 和 `modelRoute`，用 `buildPrompt()` 生成模型 user message，并把 run 存入 `server/run-store.ts` 的内存 Map。
 6. 服务返回 `AgentRun`，初始状态是 `created`。
 
 ### 4.3 订阅 SSE 流式结果
@@ -127,7 +165,7 @@ Accept: text/event-stream
 
 前端的 `agent-run.ts` 逐条消费事件，并把事件交给 `src/side-panel/stores/agent-run-messages.ts` 变成聊天消息、计划块、动作确认卡片或错误消息。
 
-## 5. 模型工具到页面动作的流程
+## 6. 模型工具到页面动作的流程
 
 模型不能直接运行脚本，也不能直接修改页面。它只能调用 `server/model-tools.ts` 中暴露的工具。目前模型可请求：
 
@@ -165,7 +203,7 @@ Accept: text/event-stream
 }
 ```
 
-## 6. 动作确认与执行
+## 7. 动作确认与执行
 
 当 Side Panel 收到 `action_request`：
 
@@ -198,7 +236,7 @@ Accept: text/event-stream
 - 未注册或已失效的 element id 不会被执行。
 - 未知工具动作默认阻断。
 
-## 7. 工具结果回传与连续运行
+## 8. 工具结果回传与连续运行
 
 如果动作来自模型 tool call，会带有 `toolCallId`。动作完成后：
 
@@ -211,11 +249,11 @@ POST /api/agent/runs/:runId/stream
 ```
 
 4. 这次请求会带上最新 `conversation`，其中包含 assistant tool call 和 tool result。
-5. 本地服务继续调用模型，让模型基于动作结果生成下一段回答或下一个动作。
+5. 本地服务继续使用 run 固定的 `modelRoute` 调用同一供应商和模型，让模型基于动作结果生成下一段回答或下一个动作。
 
 这就是“回答 -> 请求动作 -> 用户确认 -> 执行动作 -> 回传结果 -> 继续回答”的闭环。
 
-## 8. 选中文本快捷菜单流程
+## 9. 选中文本快捷菜单流程
 
 Content Script 启动时会执行 `setupSelectionMenu()`：
 
@@ -244,7 +282,7 @@ Content Script 启动时会执行 `setupSelectionMenu()`：
 - `explain`：自动发起解释任务。
 - `add_to_chat`：只把选中文本填入输入框，等待用户继续编辑。
 
-## 9. 标签页变化与页面上下文刷新
+## 10. 标签页变化与页面上下文刷新
 
 Background 监听：
 
@@ -268,7 +306,7 @@ Background 监听：
 
 Side Panel 收到后调用 `pageContext.refresh({ tabId })`，保持页面信息栏和下一次 Agent run 的上下文尽量同步。
 
-## 10. 状态模型
+## 11. 状态模型
 
 `AgentRunStatus` 描述一次 run 的整体状态：
 
@@ -296,7 +334,7 @@ Side Panel 收到后调用 `pageContext.refresh({ tabId })`，保持页面信息
 | `blocked`              | 动作被安全策略阻断             |
 | `failed`               | 动作执行失败                   |
 
-## 11. 开发时最常改的地方
+## 12. 开发时最常改的地方
 
 新增或调整 UI：
 
@@ -329,7 +367,7 @@ Side Panel 收到后调用 `pageContext.refresh({ tabId })`，保持页面信息
 - 前端请求封装在 `src/shared/api-client.ts`
 - run 状态裁剪和存储在 `server/run-store.ts`
 
-## 12. 开发验证清单
+## 13. 开发验证清单
 
 常规改动后建议运行：
 
@@ -356,10 +394,10 @@ git diff --check
 6. 点击或填写动作确认后能返回执行结果，并继续对话。
 7. 选中文本菜单的翻译、解释、添加到对话都能按预期触发。
 
-## 13. 关键边界
+## 14. 关键边界
 
 - Chrome 扩展不保存模型 API Key，Key 只在本地 Node 代理的 `.env` 中。
-- 本地服务当前用内存保存 run，服务重启后历史 run 会丢失。
+- 本地服务用 SQLite 持久化聊天历史和 run 快照；当前进程内的活动流仍保存在内存中。
 - Content Script 不能运行在 `chrome://`、扩展页等受限页面；这类页面会返回 fallback context。
 - 模型输出不会直接变成脚本执行，必须通过白名单工具协议。
 - DOM 元素 id 是页面上下文采集时生成的临时 id，页面刷新或 DOM 变化后可能失效。
