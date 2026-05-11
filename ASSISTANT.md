@@ -71,15 +71,15 @@ Local Fastify Server  →  OpenAI-compatible Provider
 
 ### Server layout
 
-| Path                     | Role                                                                                                                                  |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `server/index.ts`        | Fastify init, CORS, route registration, listen                                                                                        |
-| `server/config.ts`       | Env vars: port, model, timeout, retries, base URL                                                                                     |
-| `server/agent-routes.ts` | `GET /health`, `GET /health/openai`, `POST /api/agent/runs`, `POST /api/agent/runs/:runId/stream`, `POST /api/agent/runs/:runId/stop` |
-| `server/run-store.ts`    | In-memory run state + active stream management + context trimming                                                                     |
-| `server/agent-prompt.ts` | System prompt and default plan construction                                                                                           |
-| `server/model-tools.ts`  | OpenAI tool definitions, streaming tool-call accumulation, action generation                                                          |
-| `server/sse.ts`          | SSE event writing helpers                                                                                                             |
+| Path                     | Role                                                                                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/index.ts`        | Fastify init, CORS, route registration, listen                                                                                                           |
+| `server/config.ts`       | Env vars: port, model, timeout, retries, base URL                                                                                                        |
+| `server/agent-routes.ts` | `GET /health`, `GET /health/openai`, `GET /api/models`, `POST /api/agent/runs`, `POST /api/agent/runs/:runId/stream`, `POST /api/agent/runs/:runId/stop` |
+| `server/run-store.ts`    | In-memory run state + active stream management + context trimming                                                                                        |
+| `server/agent-prompt.ts` | System prompt and default plan construction                                                                                                              |
+| `server/model-tools.ts`  | OpenAI tool definitions, streaming tool-call accumulation, action generation                                                                             |
+| `server/sse.ts`          | SSE event writing helpers                                                                                                                                |
 
 ## Key Conventions
 
@@ -98,9 +98,11 @@ Local Fastify Server  →  OpenAI-compatible Provider
 Copy `.env.example` to `.env`. Required at minimum:
 
 ```
-OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=https://api.minimaxi.com/v1   # or any OpenAI-compatible endpoint
-OPENAI_MODEL=MiniMax-M2.7                      # must match provider's available model
+AI_MODEL_PROVIDERS_JSON=[{"id":"minmax","name":"MiniMax","baseURL":"https://api.minimaxi.com/v1","apiKeyEnv":"MINIMAX_API_KEY","models":[{"id":"MiniMax-M2.7","name":"MiniMax M2.7"}]},{"id":"deepseek","name":"DeepSeek","baseURL":"https://api.deepseek.com/v1","apiKeyEnv":"DEEPSEEK_API_KEY","models":[{"id":"deepseek-chat","name":"DeepSeek Chat"}]}]
+AI_DEFAULT_PROVIDER=minmax
+AI_DEFAULT_MODEL=MiniMax-M2.7
+MINIMAX_API_KEY=sk-...
+DEEPSEEK_API_KEY=sk-...
 OPENAI_TIMEOUT_MS=120000
 OPENAI_MAX_RETRIES=1
 AI_AGENT_PORT=8787
@@ -108,6 +110,7 @@ VITE_AGENT_API_BASE_URL=http://127.0.0.1:8787  # consumed by extension frontend
 ```
 
 `VITE_AGENT_API_BASE_URL` is the only env var that goes into the extension bundle. All model secrets stay server-side.
+If `AI_MODEL_PROVIDERS_JSON` is absent, the server falls back to the legacy single-provider `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` configuration.
 
 ## Loading the Extension in Chrome
 

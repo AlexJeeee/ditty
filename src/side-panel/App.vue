@@ -23,6 +23,7 @@ onMounted(async () => {
   await auth.initialize();
 
   pageContext.refresh();
+  void agentRun.loadModels();
   consumePendingSelectionAction();
   chrome.runtime.onMessage.addListener(handleRuntimeMessage);
   chrome.storage.onChanged.addListener(handleStorageChange);
@@ -33,6 +34,7 @@ watch(
   (authenticated) => {
     if (authenticated) {
       void agentRun.loadChatSessions();
+      void agentRun.loadModels();
       return;
     }
 

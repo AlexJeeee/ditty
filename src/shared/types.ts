@@ -120,6 +120,7 @@ export interface AgentRun {
   goal: string;
   pageUrl: string;
   pageTitle: string;
+  modelRoute: ModelRoute;
   plan?: AgentPlan;
   createdAt: string;
   updatedAt: string;
@@ -256,4 +257,25 @@ export interface ChatSessionSnapshot {
   results: AgentActionResult[];
   messages: ChatMessage[];
   modelConversation: ModelConversationMessage[];
+}
+
+export interface ModelRoute {
+  providerId: string;
+  modelId: string;
+}
+
+export interface ModelInfo {
+  id: string;
+  name: string;
+}
+
+export interface ModelProvider {
+  id: string;
+  name: string;
+  models: ModelInfo[];
+}
+
+export interface ModelsResponse {
+  defaultRoute: ModelRoute;
+  providers: ModelProvider[];
 }

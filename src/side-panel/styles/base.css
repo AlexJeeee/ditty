@@ -711,9 +711,10 @@ textarea:focus {
 }
 
 .composer-surface {
+  position: relative;
   width: 100%;
   display: grid;
-  gap: 4px;
+  gap: 6px;
   border: 1px solid #ccd5e4;
   border-radius: 18px;
   background: #ffffff;
@@ -726,6 +727,213 @@ textarea:focus {
   box-shadow:
     0 4px 12px rgba(16, 24, 39, 0.09),
     0 0 0 2px rgba(37, 99, 235, 0.08);
+}
+
+.model-picker {
+  position: relative;
+}
+
+.composer-tool-button.model-picker-button {
+  display: inline-grid;
+  width: min(172px, calc(100vw - 64px));
+  height: 28px;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  justify-items: start;
+  gap: 6px;
+  border: 1px solid #e1e7f0;
+  border-radius: 999px;
+  background: #f9fbfe;
+  color: #1f2a44;
+  padding: 3px 8px 3px 4px;
+}
+
+.composer-tool-button.model-picker-button:hover {
+  border-color: #c4d2e5;
+  background: #f3f7fc;
+}
+
+.model-picker-button-label {
+  min-width: 0;
+  overflow: hidden;
+  color: #243047;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-picker-icon-image {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.model-picker-icon-fallback {
+  position: relative;
+  width: 17px;
+  height: 17px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+}
+
+.model-picker-icon-fallback::before,
+.model-picker-icon-fallback::after {
+  position: absolute;
+  background: currentColor;
+  content: "";
+}
+
+.model-picker-icon-fallback::before {
+  top: 2px;
+  left: 6px;
+  width: 2px;
+  height: 9px;
+  border-radius: 999px;
+}
+
+.model-picker-icon-fallback::after {
+  top: 6px;
+  left: 2px;
+  width: 9px;
+  height: 2px;
+  border-radius: 999px;
+}
+
+.model-picker-popover {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: min(286px, calc(100vw - 48px));
+  border: 1px solid #d7dfec;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(16, 24, 39, 0.16);
+  padding: 10px;
+}
+
+.model-picker-header {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #172033;
+  font-size: 12px;
+}
+
+.model-picker-close {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #647084;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.model-picker-close:hover {
+  background: #eef2f7;
+  color: #172033;
+}
+
+.model-picker-list {
+  display: grid;
+  max-height: 244px;
+  gap: 7px;
+  overflow-y: auto;
+  padding-top: 6px;
+}
+
+.model-picker-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  border: 1px solid #e1e7f0;
+  border-radius: 8px;
+  background: #f9fbfe;
+  color: #172033;
+  padding: 7px 9px;
+  text-align: left;
+}
+
+.model-picker-item:hover {
+  border-color: #c4d2e5;
+  background: #f3f7fc;
+}
+
+.model-picker-item.selected {
+  border-color: #8fb0ee;
+  background: #eef4ff;
+}
+
+.model-provider-icon-frame {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #e1e7f0;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.model-provider-icon-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.model-provider-icon-fallback {
+  display: inline-grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  background: #172033;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.model-picker-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.model-provider-name,
+.model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-provider-name {
+  color: #647084;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.model-name {
+  color: #172033;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.model-picker-error {
+  margin: 8px 0 0;
+  color: #b42318;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .chat-composer textarea {
@@ -755,11 +963,20 @@ textarea:focus {
 }
 
 .composer-toolbar,
+.composer-tools,
 .composer-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 6px;
+}
+
+.composer-toolbar {
+  justify-content: space-between;
+}
+
+.composer-tools {
+  min-width: 0;
+  justify-content: flex-start;
 }
 
 .composer-actions {

@@ -1,9 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import {
-  getModel,
+  findProviderForRoute,
+  getDefaultModelRoute,
   getOpenAIBaseUrl,
   getOpenAITimeoutMs,
+  getPublicModelsResponse,
   requireOpenAIClient,
+  resolveModelRoute,
 } from "./config";
 import { buildPrompt, createPlan, SYSTEM_PROMPT } from "./agent-prompt";
 import {
@@ -35,6 +38,7 @@ import { createScopedId } from "../src/shared/id";
 import type {
   AgentRun,
   ChatSessionSnapshot,
+  ModelRoute,
   ModelConversationMessage,
   ModelToolCall,
   PageContext,
@@ -46,6 +50,7 @@ interface CreateAgentRunBody {
   goal?: string;
   pageContext?: PageContext;
   conversation?: ModelConversationMessage[];
+  modelRoute?: ModelRoute;
 }
 
 interface StreamAgentRunBody {
@@ -227,9 +232,10 @@ const streamOpenAICompletion = async (
   abortController: AbortController,
 ): Promise<void> => {
   const { run } = stored;
-  const model = getModel();
+  const modelRoute = run.modelRoute ?? getDefaultModelRoute();
+  const model = modelRoute.modelId;
   const messageId = createScopedId("openai");
-  const openai = requireOpenAIClient();
+  const openai = requireOpenAIClient(modelRoute);
   const toolCalls: ToolCallAccumulator[] = [];
   let assistantContent = "";
   let hasAnswerText = false;
@@ -361,19 +367,25 @@ export const registerAgentRoutes = (
 
   fastify.get("/health", async () => ({
     ok: true,
-    model: getModel(),
+    modelRoute: getDefaultModelRoute(),
     openaiTimeoutMs: getOpenAITimeoutMs(),
   }));
 
+  fastify.get("/api/models", async () => getPublicModelsResponse());
+
   fastify.get("/health/openai", async (_request, reply) => {
+    let baseURL = getOpenAIBaseUrl();
+
     try {
       const startedAt = Date.now();
-      const openai = requireOpenAIClient();
+      const modelRoute = getDefaultModelRoute();
+      baseURL = findProviderForRoute(modelRoute).baseURL;
+      const openai = requireOpenAIClient(modelRoute);
       await openai.models.list();
 
       return {
         ok: true,
-        model: getModel(),
+        modelRoute,
         latencyMs: Date.now() - startedAt,
       };
     } catch (error) {
@@ -383,7 +395,7 @@ export const registerAgentRoutes = (
           message:
             error instanceof Error ? error.message : "OpenAI API 不可达。",
           timeoutMs: getOpenAITimeoutMs(),
-          baseURL: getOpenAIBaseUrl(),
+          baseURL,
         },
       });
     }
@@ -493,6 +505,7 @@ export const registerAgentRoutes = (
         }
 
         const pageContext = validatePageContext(request.body?.pageContext);
+        const modelRoute = resolveModelRoute(request.body?.modelRoute);
         if (user.quotaRemaining <= 0) {
           throw new Error("额度不足。");
         }
@@ -510,6 +523,7 @@ export const registerAgentRoutes = (
           goal,
           pageUrl: pageContext.url,
           pageTitle: pageContext.title,
+          modelRoute,
           createdAt: now,
           updatedAt: now,
         };
@@ -608,7 +622,8 @@ export const registerAgentRoutes = (
       reply.raw.flushHeaders?.();
 
       // Emit planning phase events before calling OpenAI.
-      const model = getModel();
+      const modelRoute = run.modelRoute ?? getDefaultModelRoute();
+      const model = modelRoute.modelId;
       const thinkingMessageId = createScopedId("thinking");
       setRunStatus(stored, "planning");
       writeSseEvent(reply.raw, {

@@ -395,15 +395,15 @@ export interface AgentActionResult {
 
 ### 7.2 当前服务模块
 
-| 模块 | 职责 |
-| --- | --- |
-| `server/index.ts` | Fastify 初始化、CORS 注册、路由注册和监听启动 |
-| `server/config.ts` | 读取端口、模型、超时、重试和 `OPENAI_BASE_URL` |
-| `server/agent-routes.ts` | 注册健康检查、创建 run、SSE stream、停止 run |
-| `server/run-store.ts` | 内存 run 存储、活动流管理、页面上下文裁剪 |
-| `server/agent-prompt.ts` | 构造默认计划和模型 prompt |
-| `server/model-tools.ts` | OpenAI tool 定义、tool call 累积和动作生成 |
-| `server/sse.ts` | SSE 事件写入、结束事件和错误事件转换 |
+| 模块                     | 职责                                           |
+| ------------------------ | ---------------------------------------------- |
+| `server/index.ts`        | Fastify 初始化、CORS 注册、路由注册和监听启动  |
+| `server/config.ts`       | 读取端口、模型、超时、重试和 `OPENAI_BASE_URL` |
+| `server/agent-routes.ts` | 注册健康检查、创建 run、SSE stream、停止 run   |
+| `server/run-store.ts`    | 内存 run 存储、活动流管理、页面上下文裁剪      |
+| `server/agent-prompt.ts` | 构造默认计划和模型 prompt                      |
+| `server/model-tools.ts`  | OpenAI tool 定义、tool call 累积和动作生成     |
+| `server/sse.ts`          | SSE 事件写入、结束事件和错误事件转换           |
 
 ### 7.3 Agent 状态机
 
@@ -444,7 +444,7 @@ GET /health
 GET /health/openai
 ```
 
-`/health` 返回当前模型和 OpenAI timeout；`/health/openai` 会实际调用模型供应商的 models list，用于验证 Key、Base URL 和网络连通性。
+`/health` 返回默认模型路由和 OpenAI timeout；`/health/openai` 会使用默认供应商实际调用 models list，用于验证该供应商 Key、Base URL 和网络连通性。
 
 ### 8.2 Agent 任务
 
@@ -486,7 +486,14 @@ export interface AgentRun {
 export type AgentRunEvent =
   | { type: "status"; runId: string; status: AgentRunStatus }
   | { type: "message"; runId: string; text: string }
-  | { type: "message_delta"; runId: string; messageId: string; text: string; done?: boolean; channel?: "thinking" | "answer" }
+  | {
+      type: "message_delta";
+      runId: string;
+      messageId: string;
+      text: string;
+      done?: boolean;
+      channel?: "thinking" | "answer";
+    }
   | { type: "plan"; runId: string; plan: AgentPlan }
   | { type: "action_request"; runId: string; action: AgentAction }
   | { type: "action_result"; runId: string; result: AgentActionResult }
@@ -668,7 +675,7 @@ audit_logs
 ### 12.2 本地开发
 
 1. `pnpm install`
-2. 复制 `.env.example` 为 `.env`，并设置 `OPENAI_API_KEY`
+2. 复制 `.env.example` 为 `.env`，并设置所需模型供应商的 API Key
 3. `pnpm dev:all`
 4. 打开 `chrome://extensions`
 5. 启用开发者模式
@@ -687,14 +694,16 @@ VITE_AGENT_API_BASE_URL=http://127.0.0.1:8787
 
 ```text
 AI_AGENT_PORT=8787
-OPENAI_MODEL=MiniMax-M2.7
+AI_MODEL_PROVIDERS_JSON=[{"id":"minmax","name":"MiniMax","baseURL":"https://api.minimaxi.com/v1","apiKeyEnv":"MINIMAX_API_KEY","models":[{"id":"MiniMax-M2.7","name":"MiniMax M2.7"}]},{"id":"deepseek","name":"DeepSeek","baseURL":"https://api.deepseek.com/v1","apiKeyEnv":"DEEPSEEK_API_KEY","models":[{"id":"deepseek-chat","name":"DeepSeek Chat"}]}]
+AI_DEFAULT_PROVIDER=minmax
+AI_DEFAULT_MODEL=MiniMax-M2.7
 OPENAI_TIMEOUT_MS=120000
 OPENAI_MAX_RETRIES=1
-OPENAI_BASE_URL=https://api.minimaxi.com/v1
-OPENAI_API_KEY=
+MINIMAX_API_KEY=
+DEEPSEEK_API_KEY=
 ```
 
-`OPENAI_BASE_URL` 可以替换为 OpenAI 官方或其他 OpenAI 兼容供应商地址，`OPENAI_MODEL` 需要同步改成该供应商可用的模型名。
+`AI_MODEL_PROVIDERS_JSON` 描述可选模型供应商和模型列表，前端只会读取 provider/model 元数据；真实 Key 通过 `apiKeyEnv` 指向后端环境变量。未配置该 JSON 时，服务端兼容旧的 `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` 单供应商配置。
 
 ## 13. 测试方案
 

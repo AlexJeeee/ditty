@@ -66,17 +66,19 @@ cp .env.example .env
 `.env` 至少需要：
 
 ```text
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=MiniMax-M2.7
+AI_MODEL_PROVIDERS_JSON=[{"id":"minmax","name":"MiniMax","baseURL":"https://api.minimaxi.com/v1","apiKeyEnv":"MINIMAX_API_KEY","models":[{"id":"MiniMax-M2.7","name":"MiniMax M2.7"}]},{"id":"deepseek","name":"DeepSeek","baseURL":"https://api.deepseek.com/v1","apiKeyEnv":"DEEPSEEK_API_KEY","models":[{"id":"deepseek-chat","name":"DeepSeek Chat"}]}]
+AI_DEFAULT_PROVIDER=minmax
+AI_DEFAULT_MODEL=MiniMax-M2.7
+MINIMAX_API_KEY=sk-...
+DEEPSEEK_API_KEY=sk-...
 OPENAI_TIMEOUT_MS=120000
 OPENAI_MAX_RETRIES=1
-OPENAI_BASE_URL=https://api.minimaxi.com/v1
 AI_AGENT_PORT=8787
 AI_AGENT_DB_PATH=server/.data/chat-history.sqlite
 VITE_AGENT_API_BASE_URL=http://127.0.0.1:8787
 ```
 
-`OPENAI_BASE_URL` 可以指向 OpenAI 官方或其他 OpenAI 兼容供应商；`OPENAI_MODEL` 需要与该供应商实际可用模型一致。
+`AI_MODEL_PROVIDERS_JSON` 只描述供应商和模型元数据；真实 Key 通过每个 provider 的 `apiKeyEnv` 指向独立环境变量，只存在本地 Node 代理进程中。未配置 `AI_MODEL_PROVIDERS_JSON` 时，服务端仍会兼容旧的 `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` 单供应商配置。
 
 同时启动扩展开发服务器和本地 AI 代理：
 
@@ -128,11 +130,11 @@ git diff --check
 - `src/side-panel/components/ChatPanel.vue` 只负责聊天区外壳和自动滚动。
 - `src/side-panel/components/ChatComposer.vue` 负责输入框自适应、发送和停止。
 - `src/side-panel/components/ChatMessageItem.vue` 负责单条消息、计划、思考块和动作确认渲染。
-- `src/side-panel/stores/agent-run.ts` 负责 Agent run 编排、API 调用、停止和动作执行。
+- `src/side-panel/stores/agent-run.ts` 负责 Agent run 编排、模型选择、API 调用、停止和动作执行。
 - `src/side-panel/stores/agent-run-messages.ts` 保存聊天消息类型、消息生成和事件应用等纯逻辑。
 - `server/index.ts` 只负责 Fastify 初始化、CORS 和启动监听。
-- `server/agent-routes.ts` 注册 `/health`、`/health/openai`、`/api/agent/runs`、`/api/agent/runs/:runId/stream` 和 `/api/agent/runs/:runId/stop`。
-- `server/config.ts`、`server/run-store.ts`、`server/agent-prompt.ts`、`server/sse.ts` 分别负责环境配置、run 状态、prompt/plan 和 SSE 写入。
+- `server/agent-routes.ts` 注册 `/health`、`/health/openai`、`/api/models`、`/api/agent/runs`、`/api/agent/runs/:runId/stream` 和 `/api/agent/runs/:runId/stop`。
+- `server/config.ts`、`server/run-store.ts`、`server/agent-prompt.ts`、`server/sse.ts` 分别负责模型供应商配置、run 状态、prompt/plan 和 SSE 写入。
 
 ## 开发说明
 
@@ -145,7 +147,7 @@ git diff --check
 
 ## 当前实现边界
 
-- AI 聊天能力已通过本地代理接入 OpenAI 兼容接口；未启动代理或未配置 `OPENAI_API_KEY` 时，聊天区会显示可读错误。
+- AI 聊天能力已通过本地代理接入 OpenAI 兼容接口；未启动代理或未配置所选供应商的 API Key 时，聊天区会显示可读错误。
 - 登录为本地演示态，尚未接入真实认证服务。
 - Chrome 扩展不会保存或调用第三方模型 API Key，Key 只存在本地 Node 代理进程中。
 - 高风险页面动作会被本地策略阻断。

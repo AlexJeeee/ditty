@@ -209,7 +209,12 @@ onMounted(() => {
         :loading="agentRun.loading"
         :can-send="agentRun.canSend"
         :can-stop="agentRun.canStop"
+        :model-providers="agentRun.modelProviders"
+        :selected-model-route="agentRun.selectedModelRoute"
+        :model-loading="agentRun.modelLoading"
+        :model-error="agentRun.modelError"
         @update:model-value="emit('update:modelValue', $event)"
+        @select-model-route="agentRun.setSelectedModelRoute"
         @submit="submit"
         @stop="agentRun.stop"
       />
