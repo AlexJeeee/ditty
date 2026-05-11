@@ -15,6 +15,7 @@ import {
 } from "./model-tools";
 import {
   activeStreams,
+  RunStore,
   runs,
   setRunStatus,
   validatePageContext,
@@ -59,6 +60,7 @@ interface UpsertChatSessionBody {
 interface AgentRouteOptions {
   authStore?: AuthStore;
   chatHistoryStore?: ChatHistoryStore;
+  runStore?: RunStore;
 }
 
 const MAX_HISTORY_MESSAGES = 40;
@@ -198,6 +200,7 @@ const appendConversationMessage = (
   message: ModelConversationMessage,
 ) => {
   stored.conversation.push(message);
+  stored.persist?.();
   writeSseEvent(raw, {
     type: "conversation_message",
     runId: stored.run.id,
@@ -354,6 +357,7 @@ export const registerAgentRoutes = (
 ) => {
   const chatHistoryStore = options.chatHistoryStore ?? getChatHistoryStore();
   const authStore = options.authStore ?? getAuthStore();
+  const runStore = options.runStore ?? runs;
 
   fastify.get("/health", async () => ({
     ok: true,
@@ -489,7 +493,10 @@ export const registerAgentRoutes = (
         }
 
         const pageContext = validatePageContext(request.body?.pageContext);
-        authStore.deductQuota(user.id);
+        if (user.quotaRemaining <= 0) {
+          throw new Error("额度不足。");
+        }
+
         const currentUserMessage: ModelConversationMessage & {
           role: "user";
         } = {
@@ -507,7 +514,7 @@ export const registerAgentRoutes = (
           updatedAt: now,
         };
 
-        runs.set(run.id, {
+        runStore.set(run.id, {
           run,
           userId: user.id,
           goal,
@@ -519,6 +526,13 @@ export const registerAgentRoutes = (
           currentUserMessage,
           currentUserMessageEmitted: false,
         });
+
+        try {
+          authStore.deductQuota(user.id);
+        } catch (error) {
+          runStore.delete(run.id);
+          throw error;
+        }
 
         return run;
       } catch (error) {
@@ -549,7 +563,7 @@ export const registerAgentRoutes = (
         return reply;
       }
 
-      const stored = runs.get(request.params.runId);
+      const stored = runStore.get(request.params.runId);
 
       if (!stored || stored.userId !== user.id) {
         return reply.code(404).send({
@@ -609,6 +623,7 @@ export const registerAgentRoutes = (
           message: stored.currentUserMessage,
         });
         stored.currentUserMessageEmitted = true;
+        stored.persist?.();
       }
       writeSseEvent(reply.raw, {
         type: "message_delta",
@@ -687,7 +702,7 @@ export const registerAgentRoutes = (
         return reply;
       }
 
-      const stored = runs.get(request.params.runId);
+      const stored = runStore.get(request.params.runId);
 
       if (!stored || stored.userId !== user.id) {
         return reply.code(404).send({

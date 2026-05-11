@@ -33,6 +33,19 @@ export const initializeDatabase = (db: Database.Database) => {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS agent_runs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      goal TEXT NOT NULL,
+      page_url TEXT NOT NULL DEFAULT '',
+      page_title TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      stored_run_json TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id TEXT PRIMARY KEY,
       user_id TEXT,
@@ -89,6 +102,9 @@ export const initializeDatabase = (db: Database.Database) => {
 
     CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash
       ON user_sessions(token_hash);
+
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_user_updated_at
+      ON agent_runs(user_id, updated_at DESC);
 
     CREATE INDEX IF NOT EXISTS idx_chat_messages_session_order
       ON chat_messages(session_id, message_order);
