@@ -9,7 +9,7 @@ import { getDatabase } from "./db";
 
 const MAX_VISIBLE_TEXT_LENGTH = 6000;
 const MAX_SELECTED_TEXT_LENGTH = 4000;
-const MAX_ELEMENT_COUNT = 20;
+const MAX_ELEMENT_COUNT = 100;
 
 export interface StoredRun {
   run: AgentRun;

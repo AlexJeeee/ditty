@@ -143,7 +143,7 @@ const createClickElementActionFromArguments = (
     action: {
       toolName: "click_element",
       riskLevel: "medium",
-      requiresConfirmation: true,
+      requiresConfirmation: false,
       target: {
         elementId: args.element_id,
         description,
@@ -196,7 +196,7 @@ const createFillInputActionFromArguments = (
     action: {
       toolName: "fill_input",
       riskLevel: "medium",
-      requiresConfirmation: true,
+      requiresConfirmation: false,
       target: {
         elementId: args.element_id,
         description,
@@ -281,9 +281,9 @@ const MODEL_TOOL_DEFINITIONS: ModelToolDefinition[] = [
     planStep: {
       toolName: "click_element",
       riskLevel: "medium",
-      requiresConfirmation: true,
+      requiresConfirmation: false,
       reason:
-        "如果任务需要点击当前网页中的明确 DOM 元素，模型会生成 click_element 动作，执行前仍需用户确认。",
+        "如果任务需要点击当前网页中的明确 DOM 元素，模型会生成 click_element 动作，直接执行。",
     },
     createActionFromArguments: createClickElementActionFromArguments,
   },
@@ -323,9 +323,9 @@ const MODEL_TOOL_DEFINITIONS: ModelToolDefinition[] = [
     planStep: {
       toolName: "fill_input",
       riskLevel: "medium",
-      requiresConfirmation: true,
+      requiresConfirmation: false,
       reason:
-        "如果任务需要填写当前网页中的明确输入控件，模型会生成 fill_input 动作，执行前仍需用户确认。",
+        "如果任务需要填写当前网页中的明确输入控件，模型会生成 fill_input 动作，直接执行。",
     },
     createActionFromArguments: createFillInputActionFromArguments,
   },
