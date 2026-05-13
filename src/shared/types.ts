@@ -1,5 +1,26 @@
 export type ActionRiskLevel = "low" | "medium" | "high";
 
+export type TabManagementOperation =
+  | "list_tabs"
+  | "switch_tab"
+  | "reload_tab"
+  | "close_tab"
+  | "create_group"
+  | "update_group"
+  | "move_tabs_to_group"
+  | "ungroup_tabs";
+
+export type TabGroupColor =
+  | "grey"
+  | "blue"
+  | "red"
+  | "yellow"
+  | "green"
+  | "pink"
+  | "purple"
+  | "cyan"
+  | "orange";
+
 export type AgentRunStatus =
   | "idle"
   | "created"
@@ -29,6 +50,7 @@ export type AgentToolName =
   | "fill_input"
   | "scroll_page"
   | "open_url"
+  | "manage_tabs"
   | "copy_result";
 
 export type ChatRole = "user" | "assistant" | "system";
@@ -104,6 +126,13 @@ export interface AgentAction {
     text?: string;
     value?: string;
     url?: string;
+    operation?: TabManagementOperation;
+    tabId?: number;
+    tabIds?: number[];
+    groupId?: number;
+    title?: string;
+    color?: TabGroupColor;
+    collapsed?: boolean;
   };
   reason: string;
 }

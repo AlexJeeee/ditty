@@ -172,12 +172,13 @@ Accept: text/event-stream
 - `open_url`：打开 http/https 页面。
 - `click_element`：点击当前页面上下文里已有 id 的元素。
 - `fill_input`：填写当前页面上下文里已有 id 的输入控件。
+- `manage_tabs`：列出、切换、刷新、关闭标签页，并创建、更新、移动或解除标签页分组。
 
 工具调用会先经过本地服务校验：
 
 1. `accumulateToolCalls()` 收集流式 tool call。
 2. `createActionFromToolCall()` 解析 JSON 参数。
-3. 参数必须匹配工具 schema；元素动作必须提供 `element_id`。
+3. 参数必须匹配工具 schema；元素动作必须提供 `element_id`，标签页动作必须提供明确的 `tab_id`、`tab_ids` 或 `group_id`。
 4. URL 必须通过 `normalizeHttpUrl()`，只允许 http/https。
 5. 合法 tool call 会转成 `AgentAction` 并通过 `action_request` 发给 Side Panel。
 
@@ -198,6 +199,13 @@ Accept: text/event-stream
     text?: string;
     value?: string;
     url?: string;
+    operation?: TabManagementOperation;
+    tabId?: number;
+    tabIds?: number[];
+    groupId?: number;
+    title?: string;
+    color?: TabGroupColor;
+    collapsed?: boolean;
   };
   reason: string;
 }
@@ -223,7 +231,7 @@ Accept: text/event-stream
 ```
 
 5. `src/background/service-worker.ts` 调用 `executeAgentAction()`。
-6. 如果是 `open_url`，在 Background 中直接用 `chrome.tabs.create()` 打开新标签页。
+6. 如果是 `open_url` 或 `manage_tabs`，在 Background 中直接调用 `chrome.tabs` / `chrome.tabGroups`。
 7. 如果是页面 DOM 动作，Background 继续转发给 Content Script。
 8. `src/content/execute-action.ts` 执行点击、填写、高亮、滚动等白名单动作。
 9. 执行结果以 `AgentActionResult` 返回 Side Panel。

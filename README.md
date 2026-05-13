@@ -1,6 +1,6 @@
 # Ditty
 
-Ditty 一个基于 Chrome Manifest V3 的网页 AI Agent 插件。插件通过 Side Panel 读取当前网页上下文，支持聊天式任务输入、选中文本快捷菜单、Agent 计划展示、动作确认和受控页面操作。
+Ditty 是一个基于 Chrome Manifest V3 的网页 AI Agent 插件。插件通过 Side Panel 读取当前网页上下文，支持聊天式任务输入、选中文本快捷菜单、Agent 计划展示、动作确认和受控页面操作。
 
 当前 AI 聊天能力通过本地 Node 代理接入 OpenAI 兼容的 Chat Completions API。模型 Key 只放在本地 `.env` 中，Chrome 扩展只调用本地代理服务。
 

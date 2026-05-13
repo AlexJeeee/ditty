@@ -1,6 +1,11 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
 import { normalizeHttpUrl } from "../src/shared/url-action";
-import type { AgentAction, AgentToolName } from "../src/shared/types";
+import type {
+  AgentAction,
+  AgentToolName,
+  TabGroupColor,
+  TabManagementOperation,
+} from "../src/shared/types";
 
 export interface ToolCallAccumulator {
   id: string;
@@ -45,8 +50,78 @@ interface FillInputToolArguments {
   reason?: string;
 }
 
+interface ManageTabsToolArguments {
+  operation: TabManagementOperation;
+  tab_id?: number;
+  tab_ids?: number[];
+  group_id?: number;
+  title?: string;
+  color?: TabGroupColor;
+  collapsed?: boolean;
+  reason?: string;
+}
+
+const TAB_MANAGEMENT_OPERATIONS = new Set<TabManagementOperation>([
+  "list_tabs",
+  "switch_tab",
+  "reload_tab",
+  "close_tab",
+  "create_group",
+  "update_group",
+  "move_tabs_to_group",
+  "ungroup_tabs",
+]);
+
+const TAB_GROUP_COLORS = new Set<TabGroupColor>([
+  "grey",
+  "blue",
+  "red",
+  "yellow",
+  "green",
+  "pink",
+  "purple",
+  "cyan",
+  "orange",
+]);
+
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+};
+
+const isTabId = (value: unknown): value is number => {
+  return Number.isInteger(value) && Number(value) > 0;
+};
+
+const isGroupId = (value: unknown): value is number => {
+  return Number.isInteger(value) && Number(value) >= 0;
+};
+
+const parseTabIds = (value: unknown): number[] | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const uniqueTabIds = [...new Set(value)];
+
+  return uniqueTabIds.length > 0 && uniqueTabIds.every(isTabId)
+    ? uniqueTabIds
+    : undefined;
+};
+
+const parseOptionalString = (value: unknown): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const parseOptionalColor = (value: unknown): TabGroupColor | undefined => {
+  return typeof value === "string" &&
+    TAB_GROUP_COLORS.has(value as TabGroupColor)
+    ? (value as TabGroupColor)
+    : undefined;
 };
 
 const parseOpenUrlArguments = (value: unknown): OpenUrlToolArguments | null => {
@@ -209,6 +284,208 @@ const createFillInputActionFromArguments = (
   };
 };
 
+const parseManageTabsArguments = (
+  value: unknown,
+): ManageTabsToolArguments | null => {
+  if (!isRecord(value) || typeof value.operation !== "string") {
+    return null;
+  }
+
+  const operation = value.operation as TabManagementOperation;
+  if (!TAB_MANAGEMENT_OPERATIONS.has(operation)) {
+    return null;
+  }
+
+  const args: ManageTabsToolArguments = {
+    operation,
+    reason: parseOptionalString(value.reason),
+  };
+
+  if (isTabId(value.tab_id)) {
+    args.tab_id = value.tab_id;
+  }
+
+  const tabIds = parseTabIds(value.tab_ids);
+  if (tabIds) {
+    args.tab_ids = tabIds;
+  }
+
+  if (isGroupId(value.group_id)) {
+    args.group_id = value.group_id;
+  }
+
+  const title = parseOptionalString(value.title);
+  if (title) {
+    args.title = title;
+  }
+
+  const color = parseOptionalColor(value.color);
+  if (color) {
+    args.color = color;
+  }
+
+  if (typeof value.collapsed === "boolean") {
+    args.collapsed = value.collapsed;
+  }
+
+  return args;
+};
+
+const createTabTarget = (tabId: number) => ({
+  description: `标签页 ${tabId}`,
+});
+
+const createTabsTarget = (tabIds: number[]) => ({
+  description: `${tabIds.length} 个标签页`,
+});
+
+const createGroupTarget = (groupId: number) => ({
+  description: `标签页分组 ${groupId}`,
+});
+
+const createManageTabsActionFromArguments = (
+  value: unknown,
+): PendingToolActionResult => {
+  const args = parseManageTabsArguments(value);
+
+  if (!args) {
+    return {
+      blockedReason: "模型请求 manage_tabs，但参数格式未通过校验。",
+    };
+  }
+
+  const reason = args.reason || "用户请求调整浏览器标签页。";
+
+  if (args.operation === "list_tabs") {
+    return {
+      action: {
+        toolName: "manage_tabs",
+        riskLevel: "low",
+        requiresConfirmation: false,
+        input: {
+          operation: "list_tabs",
+        },
+        reason,
+      },
+    };
+  }
+
+  if (args.operation === "switch_tab" || args.operation === "reload_tab") {
+    if (typeof args.tab_id !== "number") {
+      return {
+        blockedReason: "模型请求 manage_tabs，但参数格式未通过校验。",
+      };
+    }
+
+    return {
+      action: {
+        toolName: "manage_tabs",
+        riskLevel: args.operation === "switch_tab" ? "low" : "medium",
+        requiresConfirmation: args.operation !== "switch_tab",
+        target: createTabTarget(args.tab_id),
+        input: {
+          operation: args.operation,
+          tabId: args.tab_id,
+        },
+        reason,
+      },
+    };
+  }
+
+  if (
+    args.operation === "close_tab" ||
+    args.operation === "create_group" ||
+    args.operation === "ungroup_tabs"
+  ) {
+    if (!args.tab_ids) {
+      return {
+        blockedReason: "模型请求 manage_tabs，但参数格式未通过校验。",
+      };
+    }
+
+    return {
+      action: {
+        toolName: "manage_tabs",
+        riskLevel: "medium",
+        requiresConfirmation: true,
+        target: createTabsTarget(args.tab_ids),
+        input: {
+          operation: args.operation,
+          tabIds: args.tab_ids,
+          ...(args.operation === "create_group" && args.title
+            ? { title: args.title }
+            : {}),
+          ...(args.operation === "create_group" && args.color
+            ? { color: args.color }
+            : {}),
+          ...(args.operation === "create_group" &&
+          typeof args.collapsed === "boolean"
+            ? { collapsed: args.collapsed }
+            : {}),
+        },
+        reason,
+      },
+    };
+  }
+
+  if (args.operation === "update_group") {
+    const hasUpdate =
+      Boolean(args.title || args.color) || typeof args.collapsed === "boolean";
+
+    if (typeof args.group_id !== "number" || !hasUpdate) {
+      return {
+        blockedReason: "模型请求 manage_tabs，但参数格式未通过校验。",
+      };
+    }
+
+    return {
+      action: {
+        toolName: "manage_tabs",
+        riskLevel: "medium",
+        requiresConfirmation: true,
+        target: createGroupTarget(args.group_id),
+        input: {
+          operation: "update_group",
+          groupId: args.group_id,
+          ...(args.title ? { title: args.title } : {}),
+          ...(args.color ? { color: args.color } : {}),
+          ...(typeof args.collapsed === "boolean"
+            ? { collapsed: args.collapsed }
+            : {}),
+        },
+        reason,
+      },
+    };
+  }
+
+  if (args.operation === "move_tabs_to_group") {
+    if (typeof args.group_id !== "number" || !args.tab_ids) {
+      return {
+        blockedReason: "模型请求 manage_tabs，但参数格式未通过校验。",
+      };
+    }
+
+    return {
+      action: {
+        toolName: "manage_tabs",
+        riskLevel: "medium",
+        requiresConfirmation: true,
+        target: createGroupTarget(args.group_id),
+        input: {
+          operation: "move_tabs_to_group",
+          groupId: args.group_id,
+          tabIds: args.tab_ids,
+        },
+        reason,
+      },
+    };
+  }
+
+  return {
+    blockedReason: "模型请求 manage_tabs，但参数格式未通过校验。",
+  };
+};
+
 const MODEL_TOOL_DEFINITIONS: ModelToolDefinition[] = [
   {
     toolName: "open_url",
@@ -328,6 +605,89 @@ const MODEL_TOOL_DEFINITIONS: ModelToolDefinition[] = [
         "如果任务需要填写当前网页中的明确输入控件，模型会生成 fill_input 动作，直接执行。",
     },
     createActionFromArguments: createFillInputActionFromArguments,
+  },
+  {
+    toolName: "manage_tabs",
+    chatTool: {
+      type: "function",
+      function: {
+        name: "manage_tabs",
+        description:
+          "请求 Chrome 扩展管理浏览器标签页和标签页分组。必须先通过 list_tabs 或已知动作结果获得明确的 tab_id/group_id，不能猜测 id。关闭、刷新、分组移动等会改变浏览器状态的操作会在执行前请求用户确认。",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            operation: {
+              type: "string",
+              enum: [
+                "list_tabs",
+                "switch_tab",
+                "reload_tab",
+                "close_tab",
+                "create_group",
+                "update_group",
+                "move_tabs_to_group",
+                "ungroup_tabs",
+              ],
+              description: "要执行的标签页或分组操作。",
+            },
+            tab_id: {
+              type: "number",
+              description: "单个目标标签页 id，用于 switch_tab 或 reload_tab。",
+            },
+            tab_ids: {
+              type: "array",
+              items: { type: "number" },
+              description:
+                "一个或多个明确标签页 id，用于 close_tab、create_group、move_tabs_to_group 或 ungroup_tabs。",
+            },
+            group_id: {
+              type: "number",
+              description:
+                "目标标签页分组 id，用于 update_group 或 move_tabs_to_group。",
+            },
+            title: {
+              type: "string",
+              description:
+                "标签页分组标题，用于 create_group 或 update_group。",
+            },
+            color: {
+              type: "string",
+              enum: [
+                "grey",
+                "blue",
+                "red",
+                "yellow",
+                "green",
+                "pink",
+                "purple",
+                "cyan",
+                "orange",
+              ],
+              description: "标签页分组颜色。",
+            },
+            collapsed: {
+              type: "boolean",
+              description: "是否折叠标签页分组。",
+            },
+            reason: {
+              type: "string",
+              description: "向用户说明为什么需要执行这个标签页操作。",
+            },
+          },
+          required: ["operation", "reason"],
+        },
+      },
+    },
+    planStep: {
+      toolName: "manage_tabs",
+      riskLevel: "medium",
+      requiresConfirmation: true,
+      reason:
+        "如果任务需要切换、刷新、关闭标签页或调整标签页分组，模型会生成 manage_tabs 动作；改变浏览器状态的操作会在执行前请求用户确认。",
+    },
+    createActionFromArguments: createManageTabsActionFromArguments,
   },
 ];
 

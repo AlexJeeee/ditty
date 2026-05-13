@@ -130,7 +130,14 @@ chrome-extension/
   "manifest_version": 3,
   "name": "Chrome AI Agent",
   "version": "0.1.0",
-  "permissions": ["activeTab", "storage", "scripting", "sidePanel", "tabs"],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "sidePanel",
+    "tabGroups",
+    "tabs"
+  ],
   "host_permissions": ["http://localhost:8787/*", "http://127.0.0.1:8787/*"],
   "background": {
     "service_worker": "src/background/service-worker.ts",
@@ -160,6 +167,7 @@ chrome-extension/
 - `sidePanel` 用于主交互入口。
 - `storage` 用于保存登录态、用户设置和轻量缓存。
 - `scripting` 用于必要时注入或检查 Content Script。
+- `tabGroups` 用于创建、更新和折叠浏览器标签页分组。
 - `tabs` 用于监听活动标签页变化并刷新 Side Panel 中的页面上下文。
 - `host_permissions` 当前只允许访问本地代理地址，不申请任意站点网络权限。
 

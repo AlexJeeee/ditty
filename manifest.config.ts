@@ -11,8 +11,8 @@ export default defineManifest({
     "storage",
     "scripting",
     "sidePanel",
+    "tabGroups",
     "tabs",
-    "activeTab",
   ],
   host_permissions: ["http://localhost:8787/*", "http://127.0.0.1:8787/*"],
   icons: {
